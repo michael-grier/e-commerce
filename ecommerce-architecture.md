@@ -77,6 +77,16 @@ export const productImages = pgTable("product_images", {
   position: integer("position").notNull().default(0),
 });
 
+export const pendingCheckouts = pgTable("pending_checkouts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  token: text("token").notNull().unique(),      // stored in Stripe metadata
+  items: jsonb("items").notNull(),              // validated cart lines
+  stripeSessionId: text("stripe_session_id").unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const orders = pgTable("orders", {
   id: uuid("id").defaultRandom().primaryKey(),
   orderNumber: text("order_number").notNull().unique(),     // human-readable, e.g. SK-1042
@@ -226,10 +236,10 @@ export async function POST(req: Request) {
     line_items: lineItems,
     automatic_tax: { enabled: true },                         // Stripe Tax
     shipping_address_collection: { allowed_countries: ["CA", "US"] },
-    shipping_options: [/* flat-rate shipping_rate id(s) */],
+    shipping_options: [/* inline fixed/free shipping options from env */],
     success_url: `${APP_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${APP_URL}/cart`,
-    metadata: { cart: JSON.stringify(items) },                // small carts only (500-char limit)
+    metadata: { pendingCheckoutToken },                       // compact metadata only
   });
 
   return Response.json({ url: session.url });                 // client redirects here
@@ -237,7 +247,7 @@ export async function POST(req: Request) {
 ```
 
 - **No order row is created yet.** The order is born on the webhook, so the `orders` table only ever contains real, paid orders (no abandoned-cart cruft).
-- Cart line refs ride in `session.metadata` (skate-shop carts are a handful of items, well under Stripe's 500-char metadata limit). If carts ever get large, swap to a short-lived `pending_checkouts` row keyed by a token.
+- Cart line refs are stored in a short-lived `pending_checkouts` row. Stripe metadata carries only the pending checkout token, avoiding metadata size limits.
 - With hosted Checkout you just redirect to `session.url` — **you may not need Stripe.js or the publishable key on the client at all.**
 
 ### 3. Stripe webhook (the single most important reliability surface)
@@ -262,7 +272,9 @@ export async function POST(req: Request) {
     const seen = await db.select().from(orders).where(eq(orders.stripeSessionId, s.id)).limit(1);
     if (seen.length) return new Response("ok");
 
-    const cart = cartSchema.parse(JSON.parse(s.metadata!.cart));   // runtime-validate the metadata
+    const { pendingCheckoutToken } = pendingCheckoutMetadataSchema.parse(s.metadata);
+    const pendingCheckout = await getPendingCheckout(pendingCheckoutToken);
+    const cart = cartSchema.parse(pendingCheckout.items);      // runtime-validate persisted cart refs
 
     await db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values({
@@ -360,6 +372,8 @@ STRIPE_WEBHOOK_SECRET=
 CLERK_SECRET_KEY=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 RESEND_API_KEY=
+EMAIL_FROM=
+SUPPORT_EMAIL=
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
@@ -367,6 +381,10 @@ R2_BUCKET=
 R2_PUBLIC_URL=                 # public bucket or CDN domain for image URLs
 SENTRY_DSN=
 NEXT_PUBLIC_APP_URL=
+ADMIN_USER_IDS=
+SHIPPING_ALLOWED_COUNTRIES=CA,US
+SHIPPING_STANDARD_RATE_CENTS=
+SHIPPING_FREE_THRESHOLD_CENTS=
 ```
 
 Note: hosted Checkout via redirect means you likely **don't** need `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.

@@ -35,6 +35,7 @@ Every agent must preserve these constraints:
 - Stripe Checkout is hosted. Do not build a custom payment form.
 - Stripe Tax is used through Checkout. The app does not calculate tax itself.
 - No order row is created before payment. Orders are created only from the verified Stripe webhook.
+- Checkout creates a short-lived `pending_checkouts` row and stores only its token in Stripe metadata.
 - The webhook must verify the raw request body with Stripe's signature.
 - `orders.stripeSessionId` must be unique and used as the webhook idempotency guard.
 - Inventory decrement must happen inside the same transaction as order creation.
@@ -109,6 +110,8 @@ STRIPE_WEBHOOK_SECRET=
 CLERK_SECRET_KEY=
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 RESEND_API_KEY=
+EMAIL_FROM=
+SUPPORT_EMAIL=
 R2_ACCOUNT_ID=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
@@ -117,13 +120,9 @@ R2_PUBLIC_URL=
 SENTRY_DSN=
 NEXT_PUBLIC_APP_URL=
 ADMIN_USER_IDS=
-```
-
-Optional later:
-
-```env
-STRIPE_SHIPPING_RATE_ID_CA=
-STRIPE_SHIPPING_RATE_ID_US=
+SHIPPING_ALLOWED_COUNTRIES=CA,US
+SHIPPING_STANDARD_RATE_CENTS=
+SHIPPING_FREE_THRESHOLD_CENTS=
 ```
 
 Hosted Checkout redirect does not require `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` unless a later feature introduces Stripe.js on the client.
@@ -135,7 +134,7 @@ These do not block scaffolding, database work, catalog, cart, or admin skeletons
 - Store name, logo, color direction, and product photography.
 - Real product categories and initial seed catalog.
 - Shipping countries. Architecture assumes Canada and United States.
-- Shipping rates. Decide between Stripe dashboard shipping rate IDs or inline fixed shipping options.
+- Shipping rates. V1 uses inline fixed/free shipping options from env values.
 - Currency. Architecture assumes CAD.
 - Stripe Tax origin address and tax registration setup.
 - Production domain and `NEXT_PUBLIC_APP_URL`.
@@ -263,6 +262,7 @@ Workstream 0.
   - `products`
   - `product_variants`
   - `product_images`
+  - `pending_checkouts`
   - `orders`
   - `order_items`
 - Implement enums:
@@ -273,6 +273,7 @@ Workstream 0.
 - Add seed script with realistic skate products and variants.
 - Add validators with `drizzle-zod`.
 - Add checkout/cart validators.
+- Add pending checkout validators.
 - Add money formatting and order number helpers.
 
 ### Expected Files
@@ -287,6 +288,7 @@ drizzle.config.ts
 drizzle/
 lib/validators/
   cart.ts
+  pending-checkout.ts
   product.ts
   order.ts
 lib/money.ts
@@ -322,6 +324,16 @@ lib/orders/order-number.ts
 - `url`
 - `alt`
 - `position` integer default 0
+
+`pendingCheckouts`:
+
+- `id` UUID primary key
+- `token` unique text
+- `items` jsonb containing validated cart lines
+- `stripeSessionId` nullable unique text
+- `createdAt`
+- `expiresAt`
+- `completedAt` nullable timestamp
 
 `orders`:
 
@@ -367,7 +379,8 @@ checkoutSchema = z.object({ items: cartSchema });
 
 - Admin action inputs must parse `unknown`.
 - Route handlers must parse request bodies.
-- Webhook metadata must parse after `JSON.parse`.
+- Stripe Checkout metadata must contain only `pendingCheckoutToken`.
+- Webhook must load the pending checkout and parse `pending_checkouts.items` with `cartSchema`.
 
 ### Verification
 
@@ -650,8 +663,8 @@ Workstreams 1 and 4.
 - Enable Stripe Tax.
 - Collect shipping address.
 - Configure allowed countries.
-- Add shipping options.
-- Put compact cart payload into session metadata.
+- Add inline fixed/free shipping options from env.
+- Create a `pending_checkouts` row and put only its token into session metadata.
 - Return `{ url }`.
 - Add tests around validation and line item construction if practical.
 
@@ -695,13 +708,13 @@ Errors:
 - `shipping_address_collection` with allowed countries from config
 - `success_url: "${NEXT_PUBLIC_APP_URL}/order/success?session_id={CHECKOUT_SESSION_ID}"`
 - `cancel_url: "${NEXT_PUBLIC_APP_URL}/cart"`
-- `metadata.cart = JSON.stringify(items)`
+- `metadata.pendingCheckoutToken = token`
 - Use `price_data.unit_amount` from `productVariants.priceCents`
 - Use `currency: "cad"` unless the architecture is explicitly changed
 
 ### Important Constraint
 
-Stripe metadata has size limits. V1 assumes small skate-shop carts. If metadata becomes too large, stop and implement a `pending_checkouts` table keyed by a short token rather than squeezing data into metadata.
+Stripe metadata has size limits. V1 uses `pending_checkouts` from the start, so metadata carries only a compact token.
 
 ### Verification
 
@@ -718,7 +731,7 @@ Stripe metadata has size limits. V1 assumes small skate-shop carts. If metadata 
 - No client prices are trusted.
 - Hosted Checkout redirect URL is returned.
 - Stripe Tax is enabled.
-- Cart metadata can be parsed by the webhook workstream.
+- Pending checkout metadata can be parsed by the webhook workstream.
 
 ### Handoff Prompt
 
@@ -743,8 +756,10 @@ Workstreams 1 and 5. Email sending can be stubbed until Workstream 7.
 - Verify signature using `STRIPE_WEBHOOK_SECRET`.
 - Handle `checkout.session.completed`.
 - Check `orders.stripeSessionId` idempotency before writes.
-- Parse `session.metadata.cart` with `cartSchema`.
+- Parse `session.metadata.pendingCheckoutToken`.
+- Load the matching pending checkout and parse `pending_checkouts.items` with `cartSchema`.
 - Insert order and order items in one transaction.
+- Mark the pending checkout completed in the same transaction.
 - Use Stripe session amounts for subtotal, tax, shipping, total, currency.
 - Snapshot product and variant names and unit price from Postgres.
 - Conditionally decrement inventory inside the transaction.

@@ -1,0 +1,80 @@
+import { describe, expect, test } from "bun:test";
+
+import { centsToDollars, dollarsToCents } from "@/lib/money";
+import { makeOrderNumber } from "@/lib/orders/order-number";
+import { checkoutSchema, pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
+import { productInsertSchema, slugSchema } from "@/lib/validators/product";
+
+const variantId = "3f5277e9-b73f-4a94-9bc8-5f9d06f9f5d6";
+
+describe("checkout contract", () => {
+  test("accepts variant IDs and quantities", () => {
+    expect(
+      checkoutSchema.parse({
+        items: [{ variantId, quantity: 2 }],
+      }),
+    ).toEqual({
+      items: [{ variantId, quantity: 2 }],
+    });
+  });
+
+  test("rejects empty carts and invalid UUIDs", () => {
+    expect(() => checkoutSchema.parse({ items: [] })).toThrow();
+    expect(() => checkoutSchema.parse({ items: [{ variantId: "nope", quantity: 1 }] })).toThrow();
+  });
+
+  test("accepts pending checkout token metadata", () => {
+    expect(
+      pendingCheckoutMetadataSchema.parse({
+        pendingCheckoutToken: "checkout_abcDEF123456789",
+      }),
+    ).toEqual({
+      pendingCheckoutToken: "checkout_abcDEF123456789",
+    });
+  });
+});
+
+describe("product validators", () => {
+  test("slug requires lowercase letters, numbers, and hyphens", () => {
+    expect(slugSchema.parse("street-deck-825")).toBe("street-deck-825");
+    expect(() => slugSchema.parse("Street Deck")).toThrow();
+  });
+
+  test("product insert derives a runtime schema from the Drizzle table", () => {
+    expect(
+      productInsertSchema.parse({
+        slug: "street-deck",
+        name: "Street Deck",
+        description: null,
+        category: "decks",
+        status: "active",
+      }),
+    ).toMatchObject({
+      slug: "street-deck",
+      name: "Street Deck",
+      category: "decks",
+      status: "active",
+    });
+  });
+});
+
+describe("money helpers", () => {
+  test("converts dollars and cents without persisted floats", () => {
+    expect(dollarsToCents("128")).toBe(12800);
+    expect(dollarsToCents("$1,234.50")).toBe(123450);
+    expect(centsToDollars(3400)).toBe("34.00");
+  });
+
+  test("rejects invalid money input", () => {
+    expect(() => dollarsToCents("12.345")).toThrow();
+    expect(() => dollarsToCents("-1.00")).toThrow();
+  });
+});
+
+describe("order numbers", () => {
+  test("uses the v1 order number format", () => {
+    const orderNumber = makeOrderNumber(new Date("2026-07-09T12:00:00.000Z"), "a1b2c3d4");
+
+    expect(orderNumber).toBe("SK8-20260709-A1B2C3D4");
+  });
+});

@@ -55,6 +55,19 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
    bun run build
    ```
 
+## Database
+
+The Drizzle schema lives in `lib/db/schema.ts`, and generated migrations live in `drizzle/`.
+
+```bash
+bun run db:generate
+bun run db:migrate
+bun run db:seed
+```
+
+`db:migrate` and `db:seed` require `DATABASE_URL`. The seed script is intended for local or
+development databases.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:

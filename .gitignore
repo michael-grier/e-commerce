@@ -18,7 +18,6 @@ dist
 
 # generated
 coverage
-drizzle/meta
 *.tsbuildinfo
 
 # system
