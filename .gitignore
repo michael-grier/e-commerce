@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+
+# next
+.next
+out
+
+# production
+build
+dist
+
+# env
+.env
+.env*.local
+
+# logs
+*.log
+
+# generated
+coverage
+drizzle/meta
+*.tsbuildinfo
+
+# system
+.DS_Store

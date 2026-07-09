@@ -1,0 +1,67 @@
+# Skate Shop
+
+Custom e-commerce app for a low-volume skate shop. The architecture prioritizes hosted payments,
+guest checkout, server-authoritative pricing, and a small maintainable admin surface.
+
+## Stack
+
+- Next.js 15 App Router
+- Bun for local scripts
+- Node runtime on Vercel Pro
+- Neon Postgres with Drizzle ORM and drizzle-zod
+- Clerk for admin-only authentication
+- Stripe hosted Checkout and Stripe Tax
+- Cloudflare R2 for direct product image uploads
+- shadcn/ui-style components with Tailwind CSS
+- Zustand and localStorage for cart state
+- Resend, React Email, Sentry, and Biome
+
+## Architecture Summary
+
+- The client cart stores purchase intent and display snapshots only.
+- Checkout re-reads product prices and inventory from Postgres.
+- Stripe owns payment, tax, and hosted payment UI.
+- Orders are created only by the verified Stripe webhook after payment.
+- Paid order creation snapshots items and conditionally decrements inventory in one transaction.
+- `pending_checkouts` will bridge Checkout Session creation to the webhook with a short metadata
+  token instead of storing cart JSON directly in Stripe metadata.
+- Admin access uses Clerk authentication plus an `ADMIN_USER_IDS` allowlist.
+
+## Local Setup
+
+1. Install dependencies:
+
+   ```bash
+   bun install
+   ```
+
+2. Copy the example environment file:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+3. Start the app:
+
+   ```bash
+   bun run dev
+   ```
+
+4. Run checks:
+
+   ```bash
+   bun run lint
+   bun run typecheck
+   bun run build
+   ```
+
+## Commit Checkpoints
+
+This build should be committed in small checkpoints:
+
+1. Scaffold and project foundations.
+2. Drizzle schema, migrations, validators, and pending checkout contract.
+3. Public catalog, product detail, and cart.
+4. Stripe Checkout, webhook, order persistence, inventory, and email.
+5. Admin auth, product/order management, and R2 uploads.
+6. Sentry, testing, QA checklist, and deployment docs.
