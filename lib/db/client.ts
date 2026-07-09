@@ -1,7 +1,7 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-import { env } from "@/lib/env";
+import { env, requireEnv } from "@/lib/env";
 
 import * as schema from "./schema";
 
@@ -16,7 +16,7 @@ export function getDb(): Database {
   }
 
   if (!client) {
-    client = postgres(env.DATABASE_URL, {
+    client = postgres(requireEnv("DATABASE_URL"), {
       prepare: false,
     });
     database = drizzle(client, { schema });

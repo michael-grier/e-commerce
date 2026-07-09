@@ -1,0 +1,84 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
+import { AddToCartButton } from "@/components/cart/add-to-cart-button";
+import { Button } from "@/components/ui/button";
+import type { CatalogProduct } from "@/lib/catalog/queries";
+
+import { Price } from "./price";
+import { QuantityControl } from "./quantity-control";
+
+type VariantPickerProps = {
+  product: CatalogProduct;
+};
+
+export function VariantPicker({ product }: VariantPickerProps) {
+  const firstAvailableVariant =
+    product.variants.find((variant) => variant.inventoryQty > 0) ?? product.variants[0];
+  const [variantId, setVariantId] = useState(firstAvailableVariant?.id ?? "");
+  const [quantity, setQuantity] = useState(1);
+  const selectedVariant = useMemo(
+    () => product.variants.find((variant) => variant.id === variantId) ?? firstAvailableVariant,
+    [firstAvailableVariant, product.variants, variantId],
+  );
+  const imageUrl = product.images[0]?.url ?? null;
+  const maxQuantity = Math.max(1, Math.min(selectedVariant?.inventoryQty ?? 1, 99));
+  const isUnavailable = !selectedVariant || selectedVariant.inventoryQty <= 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <p className="font-semibold text-sm">Variant</p>
+        <div className="flex flex-wrap gap-2">
+          {product.variants.map((variant) => (
+            <Button
+              key={variant.id}
+              onClick={() => {
+                setVariantId(variant.id);
+                setQuantity(1);
+              }}
+              type="button"
+              variant={variant.id === selectedVariant?.id ? "default" : "outline"}
+            >
+              {variant.name}
+            </Button>
+          ))}
+        </div>
+      </div>
+      {selectedVariant ? (
+        <div className="rounded-lg border p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-black text-2xl">
+                <Price cents={selectedVariant.priceCents} />
+              </p>
+              <p className="text-muted-foreground text-sm">{selectedVariant.sku}</p>
+            </div>
+            <p className="font-semibold text-sm">
+              {selectedVariant.inventoryQty > 0
+                ? `${selectedVariant.inventoryQty} available`
+                : "Out of stock"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <QuantityControl max={maxQuantity} onChange={setQuantity} value={quantity} />
+        {selectedVariant ? (
+          <AddToCartButton
+            disabled={isUnavailable}
+            line={{
+              variantId: selectedVariant.id,
+              quantity,
+              productName: product.name,
+              variantName: selectedVariant.name,
+              priceCents: selectedVariant.priceCents,
+              imageUrl,
+            }}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}

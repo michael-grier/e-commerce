@@ -1,0 +1,83 @@
+"use client";
+
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+
+import { toCheckoutRequest } from "./selectors";
+import type { AddCartLineInput, CartDisplayLine, CheckoutRequest } from "./types";
+
+const MAX_LINE_QUANTITY = 99;
+
+type CartState = {
+  lines: CartDisplayLine[];
+  addLine: (line: AddCartLineInput) => void;
+  updateQuantity: (variantId: string, quantity: number) => void;
+  removeLine: (variantId: string) => void;
+  clear: () => void;
+  toCheckoutRequest: () => CheckoutRequest;
+};
+
+function clampQuantity(quantity: number): number {
+  return Math.min(Math.max(Math.trunc(quantity), 1), MAX_LINE_QUANTITY);
+}
+
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      lines: [],
+      addLine: (line) => {
+        const quantity = clampQuantity(line.quantity ?? 1);
+
+        set((state) => {
+          const existingLine = state.lines.find((item) => item.variantId === line.variantId);
+
+          if (existingLine) {
+            return {
+              lines: state.lines.map((item) =>
+                item.variantId === line.variantId
+                  ? {
+                      ...item,
+                      quantity: clampQuantity(item.quantity + quantity),
+                      productName: line.productName,
+                      variantName: line.variantName,
+                      priceCents: line.priceCents,
+                      imageUrl: line.imageUrl,
+                    }
+                  : item,
+              ),
+            };
+          }
+
+          return {
+            lines: [
+              ...state.lines,
+              {
+                ...line,
+                quantity,
+              },
+            ],
+          };
+        });
+      },
+      updateQuantity: (variantId, quantity) => {
+        set((state) => ({
+          lines: state.lines.map((line) =>
+            line.variantId === variantId ? { ...line, quantity: clampQuantity(quantity) } : line,
+          ),
+        }));
+      },
+      removeLine: (variantId) => {
+        set((state) => ({
+          lines: state.lines.filter((line) => line.variantId !== variantId),
+        }));
+      },
+      clear: () => set({ lines: [] }),
+      toCheckoutRequest: () => toCheckoutRequest(get().lines),
+    }),
+    {
+      name: "skate-shop-cart",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ lines: state.lines }),
+    },
+  ),
+);

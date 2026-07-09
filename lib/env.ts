@@ -37,27 +37,8 @@ const envSchema = z.object({
   SHIPPING_FREE_THRESHOLD_CENTS: optionalIntegerString,
 });
 
-const productionRequiredKeys = [
-  "DATABASE_URL",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "CLERK_SECRET_KEY",
-  "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
-  "RESEND_API_KEY",
-  "EMAIL_FROM",
-  "SUPPORT_EMAIL",
-  "R2_ACCOUNT_ID",
-  "R2_ACCESS_KEY_ID",
-  "R2_SECRET_ACCESS_KEY",
-  "R2_BUCKET",
-  "R2_PUBLIC_URL",
-  "NEXT_PUBLIC_APP_URL",
-  "ADMIN_USER_IDS",
-  "SHIPPING_STANDARD_RATE_CENTS",
-  "SHIPPING_FREE_THRESHOLD_CENTS",
-] as const;
-
 export type Env = z.infer<typeof envSchema>;
+export type EnvKey = keyof Env;
 
 export function parseEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = envSchema.safeParse(source);
@@ -66,15 +47,17 @@ export function parseEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment variables: ${z.prettifyError(parsed.error)}`);
   }
 
-  if (source.NODE_ENV === "production") {
-    const missing = productionRequiredKeys.filter((key) => parsed.data[key] == null);
-
-    if (missing.length > 0) {
-      throw new Error(`Missing production environment variables: ${missing.join(", ")}`);
-    }
-  }
-
   return parsed.data;
 }
 
 export const env = parseEnv();
+
+export function requireEnv<K extends EnvKey>(key: K): NonNullable<Env[K]> {
+  const value = env[key];
+
+  if (value == null || value === "") {
+    throw new Error(`${key} is required.`);
+  }
+
+  return value as NonNullable<Env[K]>;
+}

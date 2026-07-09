@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { getCartItemCount, getCartSubtotalCents, toCheckoutRequest } from "@/lib/cart/selectors";
 import { centsToDollars, dollarsToCents } from "@/lib/money";
 import { makeOrderNumber } from "@/lib/orders/order-number";
 import { checkoutSchema, pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
@@ -30,6 +31,27 @@ describe("checkout contract", () => {
       }),
     ).toEqual({
       pendingCheckoutToken: "checkout_abcDEF123456789",
+    });
+  });
+});
+
+describe("cart selectors", () => {
+  test("summarizes display lines and strips snapshots for checkout", () => {
+    const lines = [
+      {
+        variantId,
+        quantity: 2,
+        productName: "Street Deck",
+        variantName: '8.25"',
+        priceCents: 8900,
+        imageUrl: "https://example.com/deck.jpg",
+      },
+    ];
+
+    expect(getCartItemCount(lines)).toBe(2);
+    expect(getCartSubtotalCents(lines)).toBe(17800);
+    expect(toCheckoutRequest(lines)).toEqual({
+      items: [{ variantId, quantity: 2 }],
     });
   });
 });
