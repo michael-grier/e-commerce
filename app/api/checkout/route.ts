@@ -30,6 +30,7 @@ export async function POST(request: Request): Promise<Response> {
           allowedCountries: parseAllowedShippingCountries(env.SHIPPING_ALLOWED_COUNTRIES),
           standardShippingRateCents: requireEnv("SHIPPING_STANDARD_RATE_CENTS"),
           freeShippingThresholdCents: requireEnv("SHIPPING_FREE_THRESHOLD_CENTS"),
+          taxEnabled: env.STRIPE_TAX_ENABLED,
         },
         {
           repository: checkoutRepository,

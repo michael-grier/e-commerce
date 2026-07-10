@@ -15,10 +15,22 @@ const optionalIntegerString = z.preprocess(
   z.coerce.number().int().nonnegative().optional(),
 );
 
+const defaultTrueBooleanString = z.preprocess(
+  (value) => {
+    if (value == null || value === "") {
+      return "true";
+    }
+
+    return typeof value === "string" ? value.toLowerCase() : value;
+  },
+  z.enum(["true", "false"]).transform((value) => value === "true"),
+);
+
 const envSchema = z.object({
   DATABASE_URL: optionalString,
   STRIPE_SECRET_KEY: optionalString,
   STRIPE_WEBHOOK_SECRET: optionalString,
+  STRIPE_TAX_ENABLED: defaultTrueBooleanString,
   CLERK_SECRET_KEY: optionalString,
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: optionalString,
   RESEND_API_KEY: optionalString,

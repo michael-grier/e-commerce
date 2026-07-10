@@ -49,6 +49,7 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
 
    Creating a hosted Checkout Session also requires a Stripe test secret plus the shipping rate,
    free-shipping threshold, allowed countries, and app URL values documented in `.env.example`.
+   Keep `STRIPE_TAX_ENABLED=false` until Stripe Tax is configured, then enable it for production.
 
 4. Run checks:
 

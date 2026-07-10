@@ -36,6 +36,7 @@ export type HostedCheckoutSettings = {
   allowedCountries: AllowedShippingCountry[];
   standardShippingRateCents: number;
   freeShippingThresholdCents: number;
+  taxEnabled: boolean;
 };
 
 type HostedCheckoutDependencies = {
@@ -70,7 +71,7 @@ export async function createHostedCheckout(
   const session = await dependencies.sessions.create({
     mode: "payment",
     line_items: buildStripeLineItems(resolvedLines),
-    automatic_tax: { enabled: true },
+    automatic_tax: { enabled: settings.taxEnabled },
     shipping_address_collection: {
       allowed_countries: settings.allowedCountries,
     },

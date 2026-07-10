@@ -130,6 +130,7 @@ describe("hosted checkout orchestration", () => {
           allowedCountries: ["CA", "US"],
           standardShippingRateCents: 1500,
           freeShippingThresholdCents: 10000,
+          taxEnabled: true,
         },
         {
           repository: {
@@ -169,6 +170,7 @@ describe("hosted checkout orchestration", () => {
         allowedCountries: ["CA", "US"],
         standardShippingRateCents: 1500,
         freeShippingThresholdCents: 20000,
+        taxEnabled: true,
       },
       {
         repository: {
@@ -209,5 +211,37 @@ describe("hosted checkout orchestration", () => {
     expect(sessionParams?.automatic_tax).toEqual({ enabled: true });
     expect(sessionParams?.shipping_address_collection?.allowed_countries).toEqual(["CA", "US"]);
     expect(sessionLinks).toEqual([{ token: "checkout_abcDEF123456789", sessionId: "cs_test_123" }]);
+  });
+
+  test("can disable Stripe Tax while preserving hosted Checkout", async () => {
+    let sessionParams: Stripe.Checkout.SessionCreateParams | undefined;
+
+    const result = await createHostedCheckout(
+      { items: [{ variantId, quantity: 1 }] },
+      {
+        appUrl: "http://localhost:3000",
+        allowedCountries: ["CA", "US"],
+        standardShippingRateCents: 1500,
+        freeShippingThresholdCents: 10000,
+        taxEnabled: false,
+      },
+      {
+        repository: {
+          findVariants: async () => [activeVariant],
+          createPendingCheckout: async () => {},
+          setStripeSessionId: async () => {},
+        },
+        sessions: {
+          create: async (params) => {
+            sessionParams = params;
+            return { id: "cs_test_tax_disabled", url: "https://checkout.stripe.com/test" };
+          },
+        },
+        createToken: () => "checkout_taxDisabled123",
+      },
+    );
+
+    expect(result.url).toBe("https://checkout.stripe.com/test");
+    expect(sessionParams?.automatic_tax).toEqual({ enabled: false });
   });
 });

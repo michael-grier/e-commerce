@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { getCartItemCount, getCartSubtotalCents, toCheckoutRequest } from "@/lib/cart/selectors";
+import { parseEnv } from "@/lib/env";
 import { centsToDollars, dollarsToCents } from "@/lib/money";
 import { makeOrderNumber } from "@/lib/orders/order-number";
 import { checkoutSchema, pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
@@ -32,6 +33,19 @@ describe("checkout contract", () => {
     ).toEqual({
       pendingCheckoutToken: "checkout_abcDEF123456789",
     });
+  });
+});
+
+describe("environment contract", () => {
+  test("defaults Stripe Tax on and accepts an explicit false flag", () => {
+    expect(parseEnv({ NODE_ENV: "test" }).STRIPE_TAX_ENABLED).toBe(true);
+    expect(parseEnv({ NODE_ENV: "test", STRIPE_TAX_ENABLED: "false" }).STRIPE_TAX_ENABLED).toBe(
+      false,
+    );
+  });
+
+  test("rejects invalid Stripe Tax flag values", () => {
+    expect(() => parseEnv({ NODE_ENV: "test", STRIPE_TAX_ENABLED: "sometimes" })).toThrow();
   });
 });
 
