@@ -72,6 +72,18 @@ bun run db:seed
 `db:migrate` and `db:seed` require `DATABASE_URL`. The seed script is intended for local or
 development databases.
 
+## Stripe Webhooks
+
+Forward sandbox webhook events to the local raw-body endpoint while developing:
+
+```bash
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+```
+
+Store the listener's `whsec_...` signing secret as `STRIPE_WEBHOOK_SECRET` in `.env.local`.
+Verified paid Checkout events create one order, snapshot its items, conditionally decrement
+inventory in the same transaction, and mark the pending checkout completed.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:
