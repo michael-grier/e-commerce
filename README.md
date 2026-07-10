@@ -23,8 +23,8 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
 - Stripe owns payment, tax, and hosted payment UI.
 - Orders are created only by the verified Stripe webhook after payment.
 - Paid order creation snapshots items and conditionally decrements inventory in one transaction.
-- `pending_checkouts` will bridge Checkout Session creation to the webhook with a short metadata
-  token instead of storing cart JSON directly in Stripe metadata.
+- `pending_checkouts` bridges Checkout Session creation to the webhook with a short metadata token
+  instead of storing cart JSON directly in Stripe metadata.
 - Admin access uses Clerk authentication plus an `ADMIN_USER_IDS` allowlist.
 
 ## Local Setup
@@ -46,6 +46,9 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
    ```bash
    bun run dev
    ```
+
+   Creating a hosted Checkout Session also requires a Stripe test secret plus the shipping rate,
+   free-shipping threshold, allowed countries, and app URL values documented in `.env.example`.
 
 4. Run checks:
 

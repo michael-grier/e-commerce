@@ -15,6 +15,18 @@ export const checkoutSchema = z
   })
   .strict();
 
+export const checkoutResponseSchema = z
+  .object({
+    url: z.string().url(),
+  })
+  .strict();
+
+export const checkoutErrorResponseSchema = z
+  .object({
+    error: z.string().min(1),
+  })
+  .strict();
+
 export const pendingCheckoutTokenSchema = z
   .string()
   .min(16)
@@ -29,4 +41,5 @@ export const pendingCheckoutMetadataSchema = z
 
 export type CartLine = z.infer<typeof cartLineSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+export type CheckoutResponse = z.infer<typeof checkoutResponseSchema>;
 export type PendingCheckoutMetadata = z.infer<typeof pendingCheckoutMetadataSchema>;
