@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type Stripe from "stripe";
 
+import { isCompletedPaidCheckout } from "@/lib/checkout/completion";
 import {
   type CheckoutRepository,
   createHostedCheckout,
@@ -23,6 +24,17 @@ const activeVariant: CheckoutVariantRecord = {
   priceCents: 8900,
   inventoryQty: 3,
 };
+
+describe("checkout completion", () => {
+  test("clears purchase intent only for completed paid sessions", () => {
+    expect(isCompletedPaidCheckout({ status: "complete", payment_status: "paid" })).toBe(true);
+    expect(
+      isCompletedPaidCheckout({ status: "complete", payment_status: "no_payment_required" }),
+    ).toBe(true);
+    expect(isCompletedPaidCheckout({ status: "open", payment_status: "paid" })).toBe(false);
+    expect(isCompletedPaidCheckout({ status: "complete", payment_status: "unpaid" })).toBe(false);
+  });
+});
 
 describe("checkout item resolution", () => {
   test("constructs Stripe line items only from resolved database fields", () => {
