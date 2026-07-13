@@ -11,8 +11,8 @@ export default function OrderSuccessPage() {
         </p>
         <h1 className="font-black text-4xl tracking-normal">Thanks for your order.</h1>
         <p className="max-w-xl text-muted-foreground">
-          Stripe checkout redirects here after payment. The order lookup and confirmation details
-          will be wired in the checkout and webhook checkpoint.
+          Your payment was received. We’ll send an order summary and shipping details to the email
+          address provided at checkout.
         </p>
       </div>
       <Button asChild>

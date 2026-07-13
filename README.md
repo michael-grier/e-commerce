@@ -84,6 +84,10 @@ Store the listener's `whsec_...` signing secret as `STRIPE_WEBHOOK_SECRET` in `.
 Verified paid Checkout events create one order, snapshot its items, conditionally decrement
 inventory in the same transaction, and mark the pending checkout completed.
 
+Order confirmations use the persisted order and item snapshots after that transaction commits.
+Configure `RESEND_API_KEY`, `EMAIL_FROM`, and `SUPPORT_EMAIL` to enable delivery. Resend failures
+are reported separately and do not make a successfully persisted Stripe webhook fail.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:
