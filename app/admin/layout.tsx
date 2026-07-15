@@ -21,10 +21,29 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     <ClerkProvider dynamic>
       <div className="min-h-screen bg-muted/40">
         <header className="border-b bg-background">
-          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
-            <Link className="font-black text-xl tracking-normal" href={"/admin" as Route}>
-              Skate Shop Admin
-            </Link>
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+              <Link className="font-black text-xl tracking-normal" href={"/admin" as Route}>
+                Skate Shop Admin
+              </Link>
+              <nav aria-label="Admin navigation" className="flex items-center gap-1">
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={"/admin" as Route} prefetch={false}>
+                    Overview
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={"/admin/products" as Route} prefetch={false}>
+                    Products
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="ghost">
+                  <Link href={"/admin/orders" as Route} prefetch={false}>
+                    Orders
+                  </Link>
+                </Button>
+              </nav>
+            </div>
             <div className="flex items-center gap-3">
               <Button asChild size="sm" variant="outline">
                 <Link href="/">View storefront</Link>

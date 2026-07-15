@@ -1,24 +1,48 @@
-import { Badge } from "@/components/ui/badge";
+import type { Route } from "next";
+import Link from "next/link";
 
-export default function AdminPage() {
+import { Button } from "@/components/ui/button";
+import { getAdminDashboardSummary } from "@/lib/admin/queries";
+
+export default async function AdminPage() {
+  const summary = await getAdminDashboardSummary();
+
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="space-y-3">
-        <Badge variant="secondary">Authentication configured</Badge>
+    <div className="space-y-8">
+      <div className="space-y-2">
         <h1 className="font-black text-4xl tracking-normal">Admin dashboard</h1>
         <p className="text-muted-foreground text-lg">
-          This area is protected by Clerk authentication and the server-side administrator
-          allowlist.
+          Review catalog and paid-order data before enabling admin mutations.
         </p>
       </div>
-      <section aria-labelledby="next-checkpoint" className="rounded-lg border bg-background p-6">
-        <h2 className="font-bold text-xl" id="next-checkpoint">
-          Next checkpoint
-        </h2>
-        <p className="mt-2 text-muted-foreground">
-          Add read-only product and order views before introducing admin mutations.
-        </p>
-      </section>
+
+      <dl className="grid gap-4 sm:grid-cols-3">
+        <SummaryCard label="Products" value={summary.productCount} />
+        <SummaryCard label="Orders" value={summary.orderCount} />
+        <SummaryCard label="Awaiting fulfillment" value={summary.awaitingFulfillmentCount} />
+      </dl>
+
+      <div className="flex flex-wrap gap-3">
+        <Button asChild>
+          <Link href={"/admin/products" as Route} prefetch={false}>
+            Review products
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={"/admin/orders" as Route} prefetch={false}>
+            Review orders
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border bg-background p-5">
+      <dt className="font-medium text-muted-foreground text-sm">{label}</dt>
+      <dd className="mt-2 font-black text-3xl">{value}</dd>
     </div>
   );
 }

@@ -5,9 +5,9 @@ import {
   deliverOrderConfirmation,
   type OrderConfirmationDelivery,
 } from "@/lib/email/deliver-order-confirmation";
-import { getShippingAddressLines } from "@/lib/email/order-confirmation";
 import { getResend } from "@/lib/email/resend";
 import { requireEnv } from "@/lib/env";
+import { getShippingAddressLines } from "@/lib/orders/shipping-address";
 
 export async function sendOrderConfirmation(orderId: string): Promise<string> {
   const order = await getDb().query.orders.findFirst({

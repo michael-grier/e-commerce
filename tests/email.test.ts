@@ -8,8 +8,9 @@ import {
   type OrderConfirmationDelivery,
   OrderConfirmationDeliveryError,
 } from "@/lib/email/deliver-order-confirmation";
-import { getShippingAddressLines, OrderConfirmationEmail } from "@/lib/email/order-confirmation";
+import { OrderConfirmationEmail } from "@/lib/email/order-confirmation";
 import { sendConfirmationAfterOrderCommit } from "@/lib/email/send-after-order";
+import { getShippingAddressLines } from "@/lib/orders/shipping-address";
 
 const delivery: OrderConfirmationDelivery = {
   orderId: "9c786325-fb57-46e3-b3ed-a60b653b3ad8",
