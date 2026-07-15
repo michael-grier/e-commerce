@@ -1,7 +1,11 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
-import { productImages, products, productVariants } from "@/lib/db/schema";
+import { productImages, productStatusValues, products, productVariants } from "@/lib/db/schema";
+import { dollarsToCents } from "@/lib/money";
+import { adminEntityIdSchema } from "@/lib/validators/admin";
+
+const postgresIntegerMax = 2_147_483_647;
 
 export const slugSchema = z
   .string()
@@ -72,9 +76,100 @@ export const productImageUpdateSchema = createUpdateSchema(productImages, {
   id: true,
 });
 
+const priceDollarsSchema = z
+  .string()
+  .trim()
+  .min(1, "Price is required.")
+  .superRefine((value, context) => {
+    try {
+      if (dollarsToCents(value) > postgresIntegerMax) {
+        context.addIssue({
+          code: "custom",
+          message: "Price is too large.",
+        });
+      }
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "Use a non-negative dollar amount with no more than two decimals.",
+      });
+    }
+  });
+
+const inventoryInputSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+$/, "Inventory must be a non-negative whole number.")
+  .refine((value) => Number(value) <= postgresIntegerMax, "Inventory is too large.");
+
+export const adminProductFormSchema = z
+  .object({
+    slug: productInsertSchema.shape.slug,
+    name: productInsertSchema.shape.name,
+    description: z.string().trim().max(4000),
+    category: z.string().trim().max(80),
+    status: z.enum(productStatusValues),
+  })
+  .strict();
+
+export const adminProductUpdateSchema = adminProductFormSchema.extend({
+  productId: adminEntityIdSchema,
+});
+
+export const adminProductIdSchema = z
+  .object({
+    productId: adminEntityIdSchema,
+  })
+  .strict();
+
+export const adminVariantFormSchema = z
+  .object({
+    name: productVariantInsertSchema.shape.name,
+    sku: productVariantInsertSchema.shape.sku,
+    price: priceDollarsSchema,
+    inventory: inventoryInputSchema,
+  })
+  .strict();
+
+export const adminVariantCreateSchema = adminVariantFormSchema.extend({
+  productId: adminEntityIdSchema,
+});
+
+export const adminVariantUpdateSchema = adminVariantCreateSchema.extend({
+  variantId: adminEntityIdSchema,
+});
+
+export const adminVariantDeleteSchema = z
+  .object({
+    productId: adminEntityIdSchema,
+    variantId: adminEntityIdSchema,
+  })
+  .strict();
+
+export function toProductMutationValues(input: AdminProductFormInput): ProductInsert {
+  return {
+    slug: input.slug,
+    name: input.name,
+    description: input.description || null,
+    category: input.category || null,
+    status: input.status,
+  };
+}
+
+export function toVariantMutationValues(input: AdminVariantFormInput) {
+  return {
+    name: input.name,
+    sku: input.sku,
+    priceCents: dollarsToCents(input.price),
+    inventoryQty: Number(input.inventory),
+  };
+}
+
 export type ProductInsert = z.infer<typeof productInsertSchema>;
 export type ProductUpdate = z.infer<typeof productUpdateSchema>;
 export type ProductVariantInsert = z.infer<typeof productVariantInsertSchema>;
 export type ProductVariantUpdate = z.infer<typeof productVariantUpdateSchema>;
 export type ProductImageInsert = z.infer<typeof productImageInsertSchema>;
 export type ProductImageUpdate = z.infer<typeof productImageUpdateSchema>;
+export type AdminProductFormInput = z.infer<typeof adminProductFormSchema>;
+export type AdminVariantFormInput = z.infer<typeof adminVariantFormSchema>;

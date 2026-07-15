@@ -1,0 +1,230 @@
+"use client";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { ActionFailure } from "@/lib/actions/result";
+import { createVariant, deleteVariant, updateVariant } from "@/lib/actions/variants";
+import { centsToDollars } from "@/lib/money";
+import { type AdminVariantFormInput, adminVariantFormSchema } from "@/lib/validators/product";
+
+type ExistingVariant = {
+  id: string;
+  name: string;
+  sku: string;
+  priceCents: number;
+  inventoryQty: number;
+};
+
+type VariantFormProps = {
+  productId: string;
+  productStatus: "draft" | "active" | "archived";
+  variant?: ExistingVariant;
+};
+
+const emptyVariant: AdminVariantFormInput = {
+  name: "",
+  sku: "",
+  price: "",
+  inventory: "0",
+};
+
+const variantFieldNames = ["name", "sku", "price", "inventory"] as const;
+
+export function VariantForm({ productId, productStatus, variant }: VariantFormProps) {
+  const router = useRouter();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const defaultValues = variant
+    ? {
+        name: variant.name,
+        sku: variant.sku,
+        price: centsToDollars(variant.priceCents),
+        inventory: String(variant.inventoryQty),
+      }
+    : emptyVariant;
+  const form = useForm<AdminVariantFormInput>({
+    defaultValues,
+    resolver: zodResolver(adminVariantFormSchema),
+  });
+
+  function showActionFailure(result: ActionFailure) {
+    for (const field of variantFieldNames) {
+      const message = result.fieldErrors?.[field]?.[0];
+
+      if (message) {
+        form.setError(field, { message, type: "server" });
+      }
+    }
+
+    setActionError(result.message);
+  }
+
+  async function onSubmit(values: AdminVariantFormInput) {
+    setActionError(null);
+    setSuccessMessage(null);
+
+    const result = variant
+      ? await updateVariant({ ...values, productId, variantId: variant.id })
+      : await createVariant({ ...values, productId });
+
+    if (!result.success) {
+      showActionFailure(result);
+      return;
+    }
+
+    form.reset(variant ? values : emptyVariant);
+    setSuccessMessage(variant ? "Variant saved." : "Variant added.");
+    router.refresh();
+  }
+
+  async function onDelete() {
+    if (!variant || !window.confirm(`Delete ${variant.name}? This cannot be undone.`)) {
+      return;
+    }
+
+    setActionError(null);
+    setSuccessMessage(null);
+    setIsDeleting(true);
+
+    try {
+      const result = await deleteVariant({ productId, variantId: variant.id });
+
+      if (!result.success) {
+        showActionFailure(result);
+        return;
+      }
+
+      router.refresh();
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  const errors = form.formState.errors;
+  const busy = form.formState.isSubmitting || isDeleting;
+
+  return (
+    <form
+      className="rounded-lg border bg-background p-5"
+      noValidate
+      onSubmit={form.handleSubmit(onSubmit)}
+    >
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <FormField error={errors.name?.message} id={`${variant?.id ?? "new"}-name`} label="Name">
+          <Input
+            aria-describedby={errors.name ? `${variant?.id ?? "new"}-name-error` : undefined}
+            aria-invalid={Boolean(errors.name)}
+            id={`${variant?.id ?? "new"}-name`}
+            placeholder='8.25"'
+            {...form.register("name")}
+          />
+        </FormField>
+        <FormField error={errors.sku?.message} id={`${variant?.id ?? "new"}-sku`} label="SKU">
+          <Input
+            aria-describedby={errors.sku ? `${variant?.id ?? "new"}-sku-error` : undefined}
+            aria-invalid={Boolean(errors.sku)}
+            id={`${variant?.id ?? "new"}-sku`}
+            spellCheck={false}
+            {...form.register("sku")}
+          />
+        </FormField>
+        <FormField
+          error={errors.price?.message}
+          id={`${variant?.id ?? "new"}-price`}
+          label="Price (CAD)"
+        >
+          <Input
+            aria-describedby={errors.price ? `${variant?.id ?? "new"}-price-error` : undefined}
+            aria-invalid={Boolean(errors.price)}
+            id={`${variant?.id ?? "new"}-price`}
+            inputMode="decimal"
+            placeholder="89.00"
+            {...form.register("price")}
+          />
+        </FormField>
+        <FormField
+          error={errors.inventory?.message}
+          id={`${variant?.id ?? "new"}-inventory`}
+          label="Inventory"
+        >
+          <Input
+            aria-describedby={
+              errors.inventory ? `${variant?.id ?? "new"}-inventory-error` : undefined
+            }
+            aria-invalid={Boolean(errors.inventory)}
+            id={`${variant?.id ?? "new"}-inventory`}
+            inputMode="numeric"
+            {...form.register("inventory")}
+          />
+        </FormField>
+      </div>
+
+      {actionError ? (
+        <p className="mt-4 text-destructive text-sm" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+      {successMessage ? (
+        <p className="mt-4 text-sm" role="status">
+          {successMessage}
+        </p>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div>
+          {variant ? (
+            <Button
+              disabled={busy || productStatus === "active"}
+              onClick={onDelete}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              {isDeleting ? "Deleting…" : "Delete"}
+            </Button>
+          ) : null}
+        </div>
+        <Button disabled={busy} size="sm" type="submit">
+          {form.formState.isSubmitting ? "Saving…" : variant ? "Save variant" : "Add variant"}
+        </Button>
+      </div>
+      {variant && productStatus === "active" ? (
+        <p className="mt-3 text-muted-foreground text-xs">
+          Set this product to draft or archived before deleting a variant.
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function FormField({
+  children,
+  error,
+  id,
+  label,
+}: {
+  children: React.ReactNode;
+  error?: string;
+  id: string;
+  label: string;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block font-semibold text-sm" htmlFor={id}>
+        {label}
+      </label>
+      {children}
+      {error ? (
+        <p className="mt-1 text-destructive text-xs" id={`${id}-error`}>
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}

@@ -12,11 +12,18 @@ export default async function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="font-black text-4xl tracking-normal">Products</h1>
-        <p className="text-muted-foreground">
-          Review every product, including draft and archived inventory.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="font-black text-4xl tracking-normal">Products</h1>
+          <p className="text-muted-foreground">
+            Review every product, including draft and archived inventory.
+          </p>
+        </div>
+        <Button asChild>
+          <Link href={"/admin/products/new" as Route} prefetch={false}>
+            New product
+          </Link>
+        </Button>
       </div>
 
       {products.length === 0 ? (
@@ -66,13 +73,18 @@ export default async function AdminProductsPage() {
                       </time>
                     </td>
                     <td className="px-4 py-4 text-right align-top">
-                      {product.status === "active" ? (
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/products/${product.slug}` as Route}>View</Link>
+                      <div className="flex justify-end gap-2">
+                        {product.status === "active" ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/products/${product.slug}` as Route}>View</Link>
+                          </Button>
+                        ) : null}
+                        <Button asChild size="sm">
+                          <Link href={`/admin/products/${product.id}` as Route} prefetch={false}>
+                            Edit
+                          </Link>
                         </Button>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -110,7 +122,12 @@ function EmptyProducts() {
   return (
     <section className="rounded-lg border border-dashed bg-background px-6 py-12 text-center">
       <h2 className="font-bold text-xl">No products yet</h2>
-      <p className="mt-2 text-muted-foreground">Product creation arrives in the next checkpoint.</p>
+      <p className="mt-2 text-muted-foreground">Create your first product to get started.</p>
+      <Button asChild className="mt-5">
+        <Link href={"/admin/products/new" as Route} prefetch={false}>
+          New product
+        </Link>
+      </Button>
     </section>
   );
 }

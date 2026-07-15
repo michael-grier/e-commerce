@@ -8,12 +8,20 @@ export const CACHE_TAGS = {
 
 export function revalidateProducts(): void {
   revalidateTag(CACHE_TAGS.products);
+  revalidateTag(CACHE_TAGS.home);
   revalidatePath("/products");
   revalidatePath("/");
 }
 
 export function revalidateProduct(slug: string): void {
-  revalidateTag(CACHE_TAGS.product(slug));
-  revalidatePath(`/products/${slug}`);
+  revalidateProductSlugs([slug]);
+}
+
+export function revalidateProductSlugs(slugs: string[]): void {
+  for (const slug of new Set(slugs)) {
+    revalidateTag(CACHE_TAGS.product(slug));
+    revalidatePath(`/products/${slug}`);
+  }
+
   revalidateProducts();
 }

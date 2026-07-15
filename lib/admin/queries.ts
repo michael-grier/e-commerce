@@ -49,6 +49,25 @@ export async function getAdminProducts() {
   });
 }
 
+export async function getAdminProductById(input: unknown) {
+  await requireAdmin();
+
+  const parsedProductId = adminEntityIdSchema.safeParse(input);
+
+  if (!parsedProductId.success) {
+    return null;
+  }
+
+  return getDb().query.products.findFirst({
+    where: (products, { eq }) => eq(products.id, parsedProductId.data),
+    with: {
+      variants: {
+        orderBy: (variants) => [asc(variants.sku)],
+      },
+    },
+  });
+}
+
 export async function getAdminOrders() {
   await requireAdmin();
 
