@@ -88,6 +88,13 @@ Order confirmations use the persisted order and item snapshots after that transa
 Configure `RESEND_API_KEY`, `EMAIL_FROM`, and `SUPPORT_EMAIL` to enable delivery. Resend failures
 are reported separately and do not make a successfully persisted Stripe webhook fail.
 
+## Admin Authentication
+
+The `/admin` route requires a Clerk development session and a matching Clerk user ID in the
+comma-separated `ADMIN_USER_IDS` allowlist. Configure `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`,
+`CLERK_SECRET_KEY`, and `ADMIN_USER_IDS` in `.env.local`. Middleware requires authentication, and
+the admin server layout independently calls `requireAdmin()` before rendering protected content.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:
