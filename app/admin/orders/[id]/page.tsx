@@ -2,6 +2,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { MarkOrderShippedButton } from "@/components/admin/mark-order-shipped-button";
 import { OrderStatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAdminDate } from "@/lib/admin/format";
@@ -43,7 +44,10 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
             <time dateTime={order.createdAt.toISOString()}>{formatAdminDate(order.createdAt)}</time>
           </p>
         </div>
-        <p className="font-black text-3xl">{formatMoney(order.totalCents, order.currency)}</p>
+        <div className="space-y-4 sm:text-right">
+          <p className="font-black text-3xl">{formatMoney(order.totalCents, order.currency)}</p>
+          {order.status === "paid" ? <MarkOrderShippedButton orderId={order.id} /> : null}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

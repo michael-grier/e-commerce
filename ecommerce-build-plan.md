@@ -1234,6 +1234,52 @@ All prior workstreams.
 You are Agent 11 for the skate shop e-commerce build. Prepare deployment and go-live documentation for Vercel Pro, Neon, Stripe live mode, Stripe Tax, production webhook registration, Resend, R2, Clerk admin, Sentry, and smoke testing. Do not invent secrets. Add a clear go-live checklist and verify production build readiness.
 ```
 
+## Workstream 12 - Returns And Exchanges (Future V2)
+
+### Goal
+
+Add a secure, auditable workflow for partial or full returns, refunds, restocking, and exchange replacements after the v1 store is stable.
+
+### Dependencies
+
+Paid order persistence, admin authorization, shipped-order management, Stripe webhook handling, inventory controls, and transactional email.
+
+### Scope
+
+- Add separate `returns` and `return_items` records instead of overloading `orders.status`.
+- Support admin-created partial and full returns against immutable order-item snapshots.
+- Track requested, approved, received, completed, and cancelled return states.
+- Record per-item quantities, reason, resolution, notes, and whether inventory was restocked.
+- Issue refunds through Stripe using server-calculated amounts and idempotency keys.
+- Reconcile asynchronous Stripe refund events without duplicating refunds or inventory changes.
+- Support exchanges as traceable replacement shipments or replacement orders.
+- Send return, refund, and exchange emails only after persistence succeeds.
+- Define secure guest order verification before adding a customer-initiated return request flow.
+
+### Architecture Guardrails
+
+- Returned quantities cannot exceed purchased quantities minus prior completed returns.
+- The browser never decides refund amounts, refund status, or inventory adjustments.
+- Restocking is explicit and transactional; a refund does not automatically imply an item is resellable.
+- Partial returns must not erase the original paid or shipped order state.
+- Stripe is authoritative for payment refund state; Postgres stores the operational return workflow.
+- Existing order-item snapshots remain immutable.
+- Automated return labels, carrier integrations, and customer accounts remain separate scope decisions.
+
+### Acceptance Criteria
+
+- Admin can process partial and full returns without mutating original order financial snapshots.
+- Stripe retries cannot create duplicate refunds.
+- Inventory changes occur once and only for explicitly restocked items.
+- Exchanges retain a clear link between the original item and its replacement fulfillment.
+- Guest return access, if implemented, cannot expose orders using only a guessable order number.
+
+### Handoff Prompt
+
+```text
+You are Agent 12 for the skate shop e-commerce build. Design and implement a V2 returns and exchanges workflow using separate return records, immutable original order snapshots, Stripe-authoritative refunds, idempotent webhook reconciliation, explicit transactional restocking, and traceable replacement fulfillment. Support partial returns. Do not let clients calculate refunds or expose guest orders through guessable identifiers. Resolve the deferred customer-request and carrier-label decisions before implementation.
+```
+
 ## Cross-Workstream Contracts
 
 ### Cart Payload
@@ -1276,6 +1322,7 @@ V1 expected transitions:
 
 - Webhook creates `paid`.
 - Admin can move `paid` to `fulfilled`.
+- Admin UI labels the persisted `fulfilled` state as `Shipped` for storefront operations.
 - Optional refund handler can move any paid/fulfilled order to `refunded`.
 - `pending` is reserved by schema but should not normally be created in v1 because orders are born on webhook completion.
 

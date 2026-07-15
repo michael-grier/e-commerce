@@ -15,6 +15,14 @@ const orderStatusStyles: Record<Order["status"], string> = {
   refunded: "border-border bg-muted text-muted-foreground",
 };
 
+const orderStatusLabels: Record<Order["status"], string> = {
+  pending: "Pending",
+  paid: "Paid",
+  fulfilled: "Shipped",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
+};
+
 function formatStatus(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -30,7 +38,7 @@ export function ProductStatusBadge({ status }: { status: Product["status"] }) {
 export function OrderStatusBadge({ status }: { status: Order["status"] }) {
   return (
     <Badge className={orderStatusStyles[status]} variant="outline">
-      {formatStatus(status)}
+      {orderStatusLabels[status]}
     </Badge>
   );
 }
