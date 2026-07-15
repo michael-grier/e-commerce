@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { productImages, productStatusValues, products, productVariants } from "@/lib/db/schema";
 import { dollarsToCents } from "@/lib/money";
+import { isProductImageObjectKey, productImageObjectKeySchema } from "@/lib/r2/upload-contract";
 import { adminEntityIdSchema } from "@/lib/validators/admin";
 
 const postgresIntegerMax = 2_147_483_647;
@@ -146,6 +147,47 @@ export const adminVariantDeleteSchema = z
   })
   .strict();
 
+export const adminImageUploadFormSchema = z
+  .object({
+    alt: z.string().trim().max(180),
+  })
+  .strict();
+
+export const adminProductImageCreateSchema = z
+  .object({
+    productId: adminEntityIdSchema,
+    objectKey: productImageObjectKeySchema,
+    alt: z.string().trim().max(180),
+  })
+  .strict()
+  .refine((input) => isProductImageObjectKey(input.objectKey, input.productId), {
+    message: "Image object key does not belong to this product.",
+    path: ["objectKey"],
+  });
+
+export const adminProductImageFormSchema = z
+  .object({
+    alt: z.string().trim().max(180),
+    position: z
+      .string()
+      .trim()
+      .regex(/^\d+$/, "Position must be a non-negative whole number.")
+      .refine((value) => Number(value) <= postgresIntegerMax, "Position is too large."),
+  })
+  .strict();
+
+export const adminProductImageUpdateSchema = adminProductImageFormSchema.extend({
+  productId: adminEntityIdSchema,
+  imageId: adminEntityIdSchema,
+});
+
+export const adminProductImageDeleteSchema = z
+  .object({
+    productId: adminEntityIdSchema,
+    imageId: adminEntityIdSchema,
+  })
+  .strict();
+
 export function toProductMutationValues(input: AdminProductFormInput): ProductInsert {
   return {
     slug: input.slug,
@@ -173,3 +215,5 @@ export type ProductImageInsert = z.infer<typeof productImageInsertSchema>;
 export type ProductImageUpdate = z.infer<typeof productImageUpdateSchema>;
 export type AdminProductFormInput = z.infer<typeof adminProductFormSchema>;
 export type AdminVariantFormInput = z.infer<typeof adminVariantFormSchema>;
+export type AdminImageUploadFormInput = z.infer<typeof adminImageUploadFormSchema>;
+export type AdminProductImageFormInput = z.infer<typeof adminProductImageFormSchema>;

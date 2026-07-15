@@ -61,6 +61,9 @@ export async function getAdminProductById(input: unknown) {
   return getDb().query.products.findFirst({
     where: (products, { eq }) => eq(products.id, parsedProductId.data),
     with: {
+      images: {
+        orderBy: (images) => [asc(images.position), asc(images.id)],
+      },
       variants: {
         orderBy: (variants) => [asc(variants.sku)],
       },

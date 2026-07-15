@@ -1,12 +1,13 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
 import { ProductForm } from "@/components/admin/product-form";
+import { ProductImageManager } from "@/components/admin/product-image-manager";
 import { ProductStatusBadge } from "@/components/admin/status-badge";
 import { VariantForm } from "@/components/admin/variant-form";
 import { Button } from "@/components/ui/button";
 import { getAdminProductById } from "@/lib/admin/queries";
+import { isR2Configured } from "@/lib/r2";
 
 type AdminProductPageProps = {
   params: Promise<{
@@ -64,6 +65,23 @@ export default async function AdminProductPage({ params }: AdminProductPageProps
             productId={product.id}
           />
         </div>
+      </section>
+
+      <section aria-labelledby="images-heading" className="space-y-4">
+        <div>
+          <h2 className="font-bold text-2xl" id="images-heading">
+            Product images
+          </h2>
+          <p className="mt-1 text-muted-foreground text-sm">
+            Lower positions appear first on the storefront.
+          </p>
+        </div>
+        <ProductImageManager
+          images={product.images}
+          productId={product.id}
+          productName={product.name}
+          r2Configured={isR2Configured()}
+        />
       </section>
 
       <section aria-labelledby="variants-heading" className="space-y-4">

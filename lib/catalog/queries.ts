@@ -64,7 +64,7 @@ function toCatalogProduct(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     variants: row.variants,
-    images: row.images.sort((a, b) => a.position - b.position),
+    images: row.images.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
     minPriceCents: prices.length > 0 ? Math.min(...prices) : null,
     maxPriceCents: prices.length > 0 ? Math.max(...prices) : null,
     totalInventoryQty: row.variants.reduce((total, variant) => total + variant.inventoryQty, 0),
@@ -99,7 +99,7 @@ async function fetchActiveProducts() {
     with: {
       variants: true,
       images: {
-        orderBy: (images) => [asc(images.position)],
+        orderBy: (images) => [asc(images.position), asc(images.id)],
       },
     },
     orderBy: (products, { desc }) => [desc(products.createdAt)],
@@ -176,7 +176,7 @@ export async function getProductBySlug(slug: string): Promise<CatalogProduct | n
     with: {
       variants: true,
       images: {
-        orderBy: (images) => [asc(images.position)],
+        orderBy: (images) => [asc(images.position), asc(images.id)],
       },
     },
   });

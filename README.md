@@ -97,6 +97,34 @@ the admin server layout independently calls `requireAdmin()` before rendering pr
 Read-only admin pages are available at `/admin/products` and `/admin/orders`; their database query
 helpers also call `requireAdmin()` before reading catalog or order data.
 
+## Cloudflare R2 Product Images
+
+Create an R2 bucket and an Object Read & Write API token scoped to that bucket. Set the five
+`R2_*` values documented in `.env.example`; `R2_PUBLIC_URL` must be the bucket's public development
+URL or custom-domain base URL, not its S3 API endpoint. Restart the app after changing environment
+values.
+
+Browser uploads use a short-lived presigned `PUT` URL and go directly to R2. Configure the bucket's
+CORS policy to allow the storefront origin, the `PUT` method, and the `Content-Type` header. For
+local development, a minimal policy is:
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Add the production app origin before deployment. See Cloudflare's documentation for
+[S3 API tokens](https://developers.cloudflare.com/r2/api/tokens/),
+[presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), and
+[bucket CORS policies](https://developers.cloudflare.com/r2/buckets/cors/).
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:
