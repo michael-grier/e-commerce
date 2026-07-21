@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  createHostedCheckout,
-  isCheckoutValidationError,
-} from "@/lib/checkout/create-hosted-checkout";
-import { CheckoutError } from "@/lib/checkout/errors";
+import { createHostedCheckout } from "@/lib/checkout/create-hosted-checkout";
+import { toCheckoutErrorResponse } from "@/lib/checkout/error-response";
 import { checkoutRepository } from "@/lib/checkout/repository";
 import { parseAllowedShippingCountries } from "@/lib/checkout/shipping";
 import { env, requireEnv } from "@/lib/env";
+import { captureServerException } from "@/lib/observability/server";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -40,15 +38,11 @@ export async function POST(request: Request): Promise<Response> {
       ),
     );
   } catch (error) {
-    if (isCheckoutValidationError(error)) {
-      return Response.json({ error: "Invalid checkout request." }, { status: 400 });
-    }
-
-    if (error instanceof CheckoutError) {
-      return Response.json({ error: error.message }, { status: error.status });
-    }
-
-    console.error("Checkout session creation failed.", error);
-    return Response.json({ error: "Unable to start checkout." }, { status: 500 });
+    return toCheckoutErrorResponse(error, (unexpectedError) => {
+      captureServerException(unexpectedError, {
+        area: "checkout",
+        operation: "checkout.create-session",
+      });
+    });
   }
 }

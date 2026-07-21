@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidateProductSlugs } from "@/lib/catalog/cache";
 import { getDb } from "@/lib/db/client";
 import { products } from "@/lib/db/schema";
+import { captureServerException } from "@/lib/observability/server";
 import {
   adminProductFormSchema,
   adminProductIdSchema,
@@ -63,6 +64,10 @@ export async function createProduct(input: unknown): Promise<ActionResult<Create
       };
     }
 
+    captureServerException(error, {
+      area: "admin",
+      operation: "admin.create-product",
+    });
     throw error;
   }
 }
@@ -113,6 +118,10 @@ export async function updateProduct(input: unknown): Promise<ActionResult> {
       };
     }
 
+    captureServerException(error, {
+      area: "admin",
+      operation: "admin.update-product",
+    });
     throw error;
   }
 }

@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { sendConfirmationAfterOrderCommit } from "@/lib/email/send-after-order";
 import { sendOrderConfirmation } from "@/lib/email/send-order-confirmation";
 import { requireEnv } from "@/lib/env";
+import { captureServerException } from "@/lib/observability/server";
 import { paidOrderRepository } from "@/lib/orders/paid-order-repository";
 import { getStripe } from "@/lib/stripe";
 import { constructVerifiedStripeEvent, processStripeEvent } from "@/lib/webhooks/stripe";
@@ -31,12 +32,18 @@ export async function POST(request: Request): Promise<Response> {
     const result = await processStripeEvent(event, paidOrderRepository);
 
     await sendConfirmationAfterOrderCommit(result, sendOrderConfirmation, (error) => {
-      console.error("Order confirmation email failed after order persistence.", error);
+      captureServerException(error, {
+        area: "email",
+        operation: "email.send-order-confirmation",
+      });
     });
 
     return new Response("ok");
   } catch (error) {
-    console.error("Stripe webhook processing failed.", error);
+    captureServerException(error, {
+      area: "webhook",
+      operation: "webhook.process-stripe-event",
+    });
     return new Response("Webhook processing failed.", { status: 500 });
   }
 }

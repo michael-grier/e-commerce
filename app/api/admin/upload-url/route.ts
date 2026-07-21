@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getDb } from "@/lib/db/client";
+import { captureServerException } from "@/lib/observability/server";
 import { createProductImageUploadUrl, getProductImagePublicUrl, isR2Configured } from "@/lib/r2";
 import {
   createProductImageObjectKey,
@@ -31,27 +32,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid image upload request." }, { status: 400 });
   }
 
-  const product = await getDb().query.products.findFirst({
-    columns: { id: true },
-    where: (products, { eq }) => eq(products.id, parsed.data.productId),
-  });
+  try {
+    const product = await getDb().query.products.findFirst({
+      columns: { id: true },
+      where: (products, { eq }) => eq(products.id, parsed.data.productId),
+    });
 
-  if (!product) {
-    return NextResponse.json({ error: "Product not found." }, { status: 404 });
-  }
+    if (!product) {
+      return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    }
 
-  const objectKey = createProductImageObjectKey(parsed.data);
-  const uploadUrl = await createProductImageUploadUrl({
-    objectKey,
-    contentType: parsed.data.contentType,
-  });
-
-  return NextResponse.json(
-    {
-      uploadUrl,
+    const objectKey = createProductImageObjectKey(parsed.data);
+    const uploadUrl = await createProductImageUploadUrl({
       objectKey,
-      publicUrl: getProductImagePublicUrl(objectKey),
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+      contentType: parsed.data.contentType,
+    });
+
+    return NextResponse.json(
+      {
+        uploadUrl,
+        objectKey,
+        publicUrl: getProductImagePublicUrl(objectKey),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    captureServerException(error, {
+      area: "r2",
+      operation: "r2.create-upload-url",
+    });
+
+    return NextResponse.json({ error: "Unable to prepare the image upload." }, { status: 500 });
+  }
 }

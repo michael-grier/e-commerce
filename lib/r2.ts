@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { env, requireEnv } from "@/lib/env";
+import { captureServerException } from "@/lib/observability/server";
 import { buildR2PublicUrl, type ProductImageContentType } from "@/lib/r2/upload-contract";
 
 const uploadUrlLifetimeSeconds = 5 * 60;
@@ -93,6 +94,10 @@ export async function getProductImageObjectMetadata(objectKey: string): Promise<
       return null;
     }
 
+    captureServerException(error, {
+      area: "r2",
+      operation: "r2.get-image-metadata",
+    });
     throw error;
   }
 }

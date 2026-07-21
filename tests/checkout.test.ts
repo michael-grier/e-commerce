@@ -6,6 +6,7 @@ import {
   type CheckoutRepository,
   createHostedCheckout,
 } from "@/lib/checkout/create-hosted-checkout";
+import { toCheckoutErrorResponse } from "@/lib/checkout/error-response";
 import { CheckoutError } from "@/lib/checkout/errors";
 import {
   buildStripeLineItems,
@@ -13,6 +14,7 @@ import {
   resolveCheckoutLines,
 } from "@/lib/checkout/items";
 import { buildShippingOptions, parseAllowedShippingCountries } from "@/lib/checkout/shipping";
+import { checkoutSchema } from "@/lib/validators/cart";
 
 const variantId = "3f5277e9-b73f-4a94-9bc8-5f9d06f9f5d6";
 
@@ -33,6 +35,50 @@ describe("checkout completion", () => {
     ).toBe(true);
     expect(isCompletedPaidCheckout({ status: "open", payment_status: "paid" })).toBe(false);
     expect(isCompletedPaidCheckout({ status: "complete", payment_status: "unpaid" })).toBe(false);
+  });
+});
+
+describe("checkout error reporting boundary", () => {
+  test("does not report validation or catalog errors", async () => {
+    const reportedErrors: unknown[] = [];
+    const validationResult = checkoutSchema.safeParse({ items: [] });
+
+    if (validationResult.success) {
+      throw new Error("Expected invalid checkout input.");
+    }
+
+    const validationResponse = toCheckoutErrorResponse(validationResult.error, (error) => {
+      reportedErrors.push(error);
+    });
+    const stockResponse = toCheckoutErrorResponse(
+      new CheckoutError("Only 1 item remains.", 409),
+      (error) => {
+        reportedErrors.push(error);
+      },
+    );
+
+    expect(validationResponse.status).toBe(400);
+    expect(stockResponse.status).toBe(409);
+    expect(await stockResponse.json()).toEqual({ error: "Only 1 item remains." });
+    expect(reportedErrors).toEqual([]);
+  });
+
+  test("reports unexpected and internal checkout failures with a safe response", async () => {
+    const reportedErrors: unknown[] = [];
+    const stripeError = new CheckoutError("Stripe did not return a Checkout URL.", 500);
+    const databaseError = new Error("Database unavailable.");
+    const stripeResponse = toCheckoutErrorResponse(stripeError, (error) => {
+      reportedErrors.push(error);
+    });
+    const databaseResponse = toCheckoutErrorResponse(databaseError, (error) => {
+      reportedErrors.push(error);
+    });
+
+    expect(stripeResponse.status).toBe(500);
+    expect(databaseResponse.status).toBe(500);
+    expect(await stripeResponse.json()).toEqual({ error: "Unable to start checkout." });
+    expect(await databaseResponse.json()).toEqual({ error: "Unable to start checkout." });
+    expect(reportedErrors).toEqual([stripeError, databaseError]);
   });
 });
 

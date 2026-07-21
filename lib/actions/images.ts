@@ -10,6 +10,7 @@ import { revalidateProduct } from "@/lib/catalog/cache";
 import { getDb } from "@/lib/db/client";
 import { productImages, products } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import { captureServerException } from "@/lib/observability/server";
 import {
   deleteProductImageObject,
   getProductImageObjectMetadata,
@@ -38,8 +39,11 @@ function revalidateAdminProductImage(productId: string, slug: string): void {
 async function deleteObjectBestEffort(objectKey: string): Promise<void> {
   try {
     await deleteProductImageObject(objectKey);
-  } catch {
-    console.error("R2 cleanup failed for a product image object.");
+  } catch (error) {
+    captureServerException(error, {
+      area: "r2",
+      operation: "r2.delete-image-object",
+    });
   }
 }
 
@@ -97,6 +101,10 @@ export async function createProductImage(input: unknown): Promise<ActionResult> 
     });
   } catch (error) {
     await deleteObjectBestEffort(parsed.data.objectKey);
+    captureServerException(error, {
+      area: "admin",
+      operation: "admin.create-product-image",
+    });
     throw error;
   }
 

@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { revalidateProduct } from "@/lib/catalog/cache";
 import { getDb } from "@/lib/db/client";
 import { pendingCheckouts, productVariants } from "@/lib/db/schema";
+import { captureServerException } from "@/lib/observability/server";
 import {
   adminVariantCreateSchema,
   adminVariantDeleteSchema,
@@ -68,6 +69,10 @@ export async function createVariant(input: unknown): Promise<ActionResult> {
       };
     }
 
+    captureServerException(error, {
+      area: "admin",
+      operation: "admin.create-variant",
+    });
     throw error;
   }
 }
@@ -127,6 +132,10 @@ export async function updateVariant(input: unknown): Promise<ActionResult> {
       };
     }
 
+    captureServerException(error, {
+      area: "admin",
+      operation: "admin.update-variant",
+    });
     throw error;
   }
 }
