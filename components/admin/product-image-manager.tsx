@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -48,15 +48,28 @@ export function ProductImageManager({
       <ImageUploader productId={productId} r2Configured={r2Configured} />
 
       {images.length > 0 ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {images.map((image) => (
-            <ProductImageEditor
-              image={image}
-              key={image.id}
-              productId={productId}
-              productName={productName}
-            />
-          ))}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="font-bold text-lg">Current images</h3>
+              <p className="text-muted-foreground text-sm">
+                Edit image descriptions and storefront order below.
+              </p>
+            </div>
+            <p className="text-muted-foreground text-sm">
+              {images.length} {images.length === 1 ? "image" : "images"}
+            </p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {images.map((image) => (
+              <ProductImageEditor
+                image={image}
+                key={image.id}
+                productId={productId}
+                productName={productName}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border border-dashed bg-background px-6 py-10 text-center">
@@ -74,12 +87,25 @@ function ImageUploader({ productId, r2Configured }: { productId: string; r2Confi
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const form = useForm<AdminImageUploadFormInput>({
     defaultValues: { alt: "" },
     resolver: zodResolver(adminImageUploadFormSchema),
   });
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [selectedFile]);
 
   async function onSubmit(values: AdminImageUploadFormInput) {
     setActionError(null);
@@ -150,7 +176,7 @@ function ImageUploader({ productId, r2Configured }: { productId: string; r2Confi
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      setSuccessMessage("Image uploaded.");
+      setSuccessMessage("Image added.");
       router.refresh();
     } catch {
       setActionError("Image upload failed. Check the R2 configuration and try again.");
@@ -163,53 +189,92 @@ function ImageUploader({ productId, r2Configured }: { productId: string; r2Confi
       noValidate
       onSubmit={form.handleSubmit(onSubmit)}
     >
-      <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-        <div>
-          <label className="mb-2 block font-semibold text-sm" htmlFor="product-image-file">
-            Image file
-          </label>
-          <Input
-            accept={allowedProductImageTypes.join(",")}
-            disabled={!r2Configured || form.formState.isSubmitting}
-            id="product-image-file"
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            ref={fileInputRef}
-            type="file"
-          />
-          <p className="mt-1 text-muted-foreground text-xs">
-            JPEG, PNG, WebP, or AVIF. Maximum {MAX_PRODUCT_IMAGE_BYTES / 1024 / 1024} MB.
-          </p>
-        </div>
-        <FormField error={form.formState.errors.alt?.message} id="new-image-alt" label="Alt text">
-          <Input
-            aria-describedby={form.formState.errors.alt ? "new-image-alt-error" : undefined}
-            aria-invalid={Boolean(form.formState.errors.alt)}
-            disabled={!r2Configured || form.formState.isSubmitting}
-            id="new-image-alt"
-            placeholder="Describe the product image"
-            {...form.register("alt")}
-          />
-        </FormField>
-        <Button disabled={!r2Configured || form.formState.isSubmitting} type="submit">
-          {form.formState.isSubmitting ? "Uploading…" : "Upload image"}
-        </Button>
+      <div className="mb-5">
+        <h3 className="font-bold text-lg">Add an image</h3>
+        <p className="text-muted-foreground text-sm">
+          Choose a file and set its initial description before adding it to the product.
+        </p>
       </div>
 
-      {!r2Configured ? (
-        <p className="mt-4 text-amber-800 text-sm" role="status">
-          Configure all R2 environment values and restart the dev server to enable uploads.
-        </p>
-      ) : null}
-      {actionError ? (
-        <p className="mt-4 text-destructive text-sm" role="alert">
-          {actionError}
-        </p>
-      ) : null}
-      {successMessage ? (
-        <p className="mt-4 text-sm" role="status">
-          {successMessage}
-        </p>
-      ) : null}
+      <div className="grid gap-5 lg:grid-cols-[10rem_minmax(0,1fr)]">
+        <div className="relative aspect-square w-full max-w-40 overflow-hidden rounded-md bg-muted">
+          {previewUrl ? (
+            <Image
+              alt=""
+              className="h-full w-full object-contain object-center"
+              fill
+              sizes="160px"
+              src={previewUrl}
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center px-4 text-center text-muted-foreground text-sm">
+              Image preview
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2 md:items-start">
+            <div>
+              <label className="mb-2 block font-semibold text-sm" htmlFor="product-image-file">
+                Image file
+              </label>
+              <Input
+                accept={allowedProductImageTypes.join(",")}
+                aria-describedby="product-image-file-help"
+                disabled={!r2Configured || form.formState.isSubmitting}
+                id="product-image-file"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                ref={fileInputRef}
+                type="file"
+              />
+              <p className="mt-1 text-muted-foreground text-xs" id="product-image-file-help">
+                JPEG, PNG, WebP, or AVIF. Maximum {MAX_PRODUCT_IMAGE_BYTES / 1024 / 1024} MB.
+              </p>
+            </div>
+            <FormField
+              error={form.formState.errors.alt?.message}
+              id="new-image-alt"
+              label="Initial alt text"
+            >
+              <Input
+                aria-describedby={form.formState.errors.alt ? "new-image-alt-error" : undefined}
+                aria-invalid={Boolean(form.formState.errors.alt)}
+                disabled={!r2Configured || form.formState.isSubmitting}
+                id="new-image-alt"
+                placeholder="Describe the product image"
+                {...form.register("alt")}
+              />
+            </FormField>
+          </div>
+
+          {!r2Configured ? (
+            <p className="text-amber-800 text-sm" role="status">
+              Configure all R2 environment values and restart the dev server to enable uploads.
+            </p>
+          ) : null}
+          {actionError ? (
+            <p className="text-destructive text-sm" role="alert">
+              {actionError}
+            </p>
+          ) : null}
+          {successMessage ? (
+            <p className="text-sm" role="status">
+              {successMessage}
+            </p>
+          ) : null}
+
+          <div className="flex justify-end border-t pt-4">
+            <Button
+              disabled={!r2Configured || !selectedFile || form.formState.isSubmitting}
+              type="submit"
+            >
+              {form.formState.isSubmitting ? "Adding image…" : "Add image"}
+            </Button>
+          </div>
+        </div>
+      </div>
     </form>
   );
 }
@@ -283,21 +348,25 @@ function ProductImageEditor({
 
   return (
     <form
-      className="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-[9rem_1fr]"
+      className="grid gap-4 rounded-lg border bg-background p-4 sm:grid-cols-[10rem_minmax(0,1fr)]"
       noValidate
       onSubmit={form.handleSubmit(onSubmit)}
     >
-      <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
+      <div className="relative aspect-square self-start overflow-hidden rounded-md bg-muted">
         <Image
           alt={image.alt ?? productName}
-          className="object-cover"
+          className="h-full w-full object-contain object-center"
           fill
-          sizes="144px"
+          sizes="160px"
           src={image.url}
           unoptimized
         />
       </div>
       <div className="space-y-4">
+        <div>
+          <h4 className="font-semibold">Image details</h4>
+          <p className="text-muted-foreground text-xs">Changes here do not re-upload the file.</p>
+        </div>
         <FormField
           error={form.formState.errors.alt?.message}
           id={`${image.id}-alt`}
@@ -343,8 +412,8 @@ function ProductImageEditor({
           <Button disabled={busy} onClick={onDelete} size="sm" type="button" variant="destructive">
             {isDeleting ? "Deleting…" : "Delete"}
           </Button>
-          <Button disabled={busy} size="sm" type="submit">
-            {form.formState.isSubmitting ? "Saving…" : "Save image"}
+          <Button disabled={busy || !form.formState.isDirty} size="sm" type="submit">
+            {form.formState.isSubmitting ? "Saving…" : "Save details"}
           </Button>
         </div>
       </div>

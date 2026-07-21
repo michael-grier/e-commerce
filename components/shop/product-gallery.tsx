@@ -17,7 +17,7 @@ export function ProductGallery({ name, images }: ProductGalleryProps) {
         {primaryImage ? (
           <Image
             alt={primaryImage.alt ?? name}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain object-center"
             fill
             priority
             sizes="(min-width: 1024px) 55vw, 100vw"
@@ -39,7 +39,7 @@ export function ProductGallery({ name, images }: ProductGalleryProps) {
             >
               <Image
                 alt={image.alt ?? name}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain object-center"
                 fill
                 sizes="20vw"
                 src={image.url}

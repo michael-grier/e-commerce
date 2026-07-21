@@ -68,7 +68,7 @@ export default async function HomePage() {
                   {product.imageUrl ? (
                     <Image
                       alt={product.imageAlt ?? product.name}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain object-center"
                       fill
                       sizes="(min-width: 768px) 22vw, 30vw"
                       src={product.imageUrl}

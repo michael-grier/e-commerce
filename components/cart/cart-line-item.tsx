@@ -24,7 +24,7 @@ export function CartLineItem({ line }: CartLineItemProps) {
         {line.imageUrl ? (
           <Image
             alt=""
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain object-center"
             fill
             sizes="6rem"
             src={line.imageUrl}
