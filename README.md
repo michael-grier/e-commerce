@@ -125,6 +125,20 @@ Add the production app origin before deployment. See Cloudflare's documentation 
 [presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), and
 [bucket CORS policies](https://developers.cloudflare.com/r2/buckets/cors/).
 
+## Sentry Error Monitoring
+
+Create a Sentry Next.js project and set `SENTRY_DSN` plus `NEXT_PUBLIC_SENTRY_DSN` to the same
+project DSN. The public DSN is an ingest address, not an authentication secret. Error monitoring is
+disabled when the corresponding DSN is absent and in the test environment.
+
+The initial configuration collects errors only: tracing, session replay, Sentry logs, and default
+PII collection are disabled. Server code should use `captureServerException()` with stable area and
+operation labels; do not attach customer details, request bodies, payment data, or secrets.
+
+Readable production stack traces additionally require `SENTRY_ORG`, `SENTRY_PROJECT`, and a secret
+`SENTRY_AUTH_TOKEN` in the deployment environment. Source-map generation and upload remain disabled
+when the auth token is absent. Never expose `SENTRY_AUTH_TOKEN` through a `NEXT_PUBLIC_*` variable.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:
