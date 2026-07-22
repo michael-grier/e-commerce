@@ -55,9 +55,12 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
 
    ```bash
    bun run lint
+   bun test
    bun run typecheck
    bun run build
    ```
+
+   Before a release, complete the reusable [manual QA checklist](docs/manual-qa.md).
 
 ## Database
 

@@ -199,6 +199,22 @@ describe("Stripe event processing", () => {
     });
     expect(persistedCheckout?.stripeSessionId).toBe("cs_test_paid");
   });
+
+  test("handles asynchronous payment success events through the same writer", async () => {
+    const writer = {
+      createPaidOrder: async () => ({ created: true, orderId: "order_async" }),
+    };
+
+    expect(
+      await processStripeEvent(
+        {
+          type: "checkout.session.async_payment_succeeded",
+          data: { object: makeCheckoutSession() },
+        },
+        writer,
+      ),
+    ).toEqual({ handled: true, created: true, orderId: "order_async" });
+  });
 });
 
 describe("paid order snapshots and inventory", () => {
@@ -233,5 +249,18 @@ describe("paid order snapshots and inventory", () => {
     expect(() => assertInventoryDecremented([], { variantId, quantity: 2 })).toThrow(
       InventoryUnavailableError,
     );
+  });
+
+  test("accepts exactly one matching conditional inventory update", () => {
+    expect(() => assertInventoryDecremented([variantId], { variantId, quantity: 2 })).not.toThrow();
+    expect(() =>
+      assertInventoryDecremented([variantId, variantId], { variantId, quantity: 2 }),
+    ).toThrow(InventoryUnavailableError);
+    expect(() =>
+      assertInventoryDecremented(["879dd483-16c9-4d6c-885f-b00525f84923"], {
+        variantId,
+        quantity: 2,
+      }),
+    ).toThrow(InventoryUnavailableError);
   });
 });

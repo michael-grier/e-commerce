@@ -1,0 +1,122 @@
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+
+import type { CartDisplayLine } from "@/lib/cart/types";
+
+class MemoryStorage implements Storage {
+  readonly values = new Map<string, string>();
+
+  get length(): number {
+    return this.values.size;
+  }
+
+  clear(): void {
+    this.values.clear();
+  }
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  key(index: number): string | null {
+    return Array.from(this.values.keys())[index] ?? null;
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+}
+
+const storage = new MemoryStorage();
+const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: storage,
+});
+
+const { useCartStore } = await import("@/lib/cart/store");
+
+afterAll(() => {
+  if (originalLocalStorage) {
+    Object.defineProperty(globalThis, "localStorage", originalLocalStorage);
+    return;
+  }
+
+  Reflect.deleteProperty(globalThis, "localStorage");
+});
+
+const deck: CartDisplayLine = {
+  variantId: "3f5277e9-b73f-4a94-9bc8-5f9d06f9f5d6",
+  quantity: 1,
+  productName: "Database Deck",
+  variantName: '8.25"',
+  priceCents: 8900,
+  imageUrl: "https://images.example.com/deck.jpg",
+};
+
+const bearings: CartDisplayLine = {
+  variantId: "879dd483-16c9-4d6c-885f-b00525f84923",
+  quantity: 1,
+  productName: "Precision Bearings",
+  variantName: "Set of 8",
+  priceCents: 3400,
+  imageUrl: null,
+};
+
+beforeEach(() => {
+  useCartStore.setState({ lines: [] });
+  storage.clear();
+});
+
+describe("cart store", () => {
+  test("adds lines and merges repeated variants within the quantity cap", () => {
+    useCartStore.getState().addLine(deck);
+    useCartStore.getState().addLine({ ...deck, quantity: 2, productName: "Updated Deck" });
+    useCartStore.getState().addLine({ ...deck, quantity: 98, productName: "Updated Deck" });
+
+    expect(useCartStore.getState().lines).toEqual([
+      {
+        ...deck,
+        productName: "Updated Deck",
+        quantity: 99,
+      },
+    ]);
+  });
+
+  test("updates quantities, removes lines, and clears the cart", () => {
+    useCartStore.getState().addLine(deck);
+    useCartStore.getState().addLine(bearings);
+    useCartStore.getState().updateQuantity(deck.variantId, 3);
+    useCartStore.getState().removeLine(bearings.variantId);
+
+    expect(useCartStore.getState().lines).toEqual([{ ...deck, quantity: 3 }]);
+
+    useCartStore.getState().clear();
+    expect(useCartStore.getState().lines).toEqual([]);
+  });
+
+  test("rehydrates persisted cart state after a simulated refresh", async () => {
+    useCartStore.getState().addLine(deck);
+    useCartStore.getState().addLine(bearings);
+
+    const persistedCart = storage.getItem("skate-shop-cart");
+    expect(persistedCart).not.toBeNull();
+
+    useCartStore.setState({ lines: [] });
+    storage.setItem("skate-shop-cart", persistedCart ?? "");
+    await useCartStore.persist.rehydrate();
+
+    expect(useCartStore.getState().lines).toEqual([deck, bearings]);
+  });
+
+  test("builds checkout intent without display snapshot fields", () => {
+    useCartStore.getState().addLine({ ...deck, quantity: 2 });
+
+    expect(useCartStore.getState().toCheckoutRequest()).toEqual({
+      items: [{ variantId: deck.variantId, quantity: 2 }],
+    });
+  });
+});
