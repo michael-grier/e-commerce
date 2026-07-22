@@ -1,6 +1,7 @@
 import type { SearchParams } from "nuqs/server";
 
 import { CatalogFilters } from "@/components/shop/catalog-filters";
+import { CatalogPagination } from "@/components/shop/catalog-pagination";
 import { ProductGrid } from "@/components/shop/product-grid";
 import { Button } from "@/components/ui/button";
 import { getCatalogPage } from "@/lib/catalog/queries";
@@ -34,13 +35,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       </header>
       <CatalogFilters categories={catalog.categories} totalProducts={catalog.totalProducts} />
       <ProductGrid products={catalog.products} />
-      {catalog.totalPages > 1 ? (
-        <nav className="flex items-center justify-center gap-3" aria-label="Catalog pagination">
-          <p className="text-muted-foreground text-sm">
-            Page {catalog.page} of {catalog.totalPages}
-          </p>
-        </nav>
-      ) : null}
+      <CatalogPagination
+        currentPage={catalog.page}
+        searchParams={parsedSearchParams}
+        totalPages={catalog.totalPages}
+      />
     </main>
   );
 }
