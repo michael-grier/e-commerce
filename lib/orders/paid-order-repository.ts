@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
 import { orderItems, orders, pendingCheckouts, productVariants } from "@/lib/db/schema";
@@ -10,6 +10,7 @@ import {
   PaidOrderError,
   type PaidOrderWriter,
   parsePendingCheckoutLineSnapshots,
+  planInventoryAllocation,
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import { makeOrderNumber } from "@/lib/orders/order-number";
@@ -46,12 +47,24 @@ export const paidOrderRepository: PaidOrderWriter = {
       const lineSnapshots = parsePendingCheckoutLineSnapshots(pendingCheckout.lineItems);
       assertPendingCheckoutItemsMatchSnapshots(pendingCheckout.items, lineSnapshots);
       const snapshots = resolveOrderItemSnapshots(lineSnapshots, checkout);
+      const variantIds = snapshots.map((snapshot) => snapshot.variantId);
+      const variants = await tx
+        .select({
+          id: productVariants.id,
+          inventoryQty: productVariants.inventoryQty,
+        })
+        .from(productVariants)
+        .where(inArray(productVariants.id, variantIds))
+        .orderBy(asc(productVariants.id))
+        .for("update");
+      const allocation = planInventoryAllocation(snapshots, variants);
       const [order] = await tx
         .insert(orders)
         .values({
           orderNumber: makeOrderNumber(),
           email: checkout.email,
           status: "paid",
+          inventoryStatus: allocation.status,
           stripeSessionId: checkout.stripeSessionId,
           stripePaymentIntentId: checkout.stripePaymentIntentId,
           subtotalCents: checkout.subtotalCents,
@@ -77,23 +90,23 @@ export const paidOrderRepository: PaidOrderWriter = {
         return { created: false, orderId: concurrentOrder.id };
       }
 
-      for (const snapshot of snapshots) {
+      for (const line of allocation.lines) {
         const updatedVariants = await tx
           .update(productVariants)
           .set({
-            inventoryQty: sql`${productVariants.inventoryQty} - ${snapshot.quantity}`,
+            inventoryQty: sql`${productVariants.inventoryQty} - ${line.quantity}`,
           })
           .where(
             and(
-              eq(productVariants.id, snapshot.variantId),
-              gte(productVariants.inventoryQty, snapshot.quantity),
+              eq(productVariants.id, line.variantId),
+              gte(productVariants.inventoryQty, line.quantity),
             ),
           )
           .returning({ id: productVariants.id });
 
         assertInventoryDecremented(
           updatedVariants.map((variant) => variant.id),
-          snapshot,
+          line,
         );
       }
 

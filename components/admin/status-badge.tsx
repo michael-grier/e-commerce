@@ -23,6 +23,16 @@ const orderStatusLabels: Record<Order["status"], string> = {
   refunded: "Refunded",
 };
 
+const orderInventoryStatusStyles: Record<Order["inventoryStatus"], string> = {
+  allocated: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  exception: "border-red-200 bg-red-50 text-red-800",
+};
+
+const orderInventoryStatusLabels: Record<Order["inventoryStatus"], string> = {
+  allocated: "Allocated",
+  exception: "Inventory exception",
+};
+
 function formatStatus(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -39,6 +49,14 @@ export function OrderStatusBadge({ status }: { status: Order["status"] }) {
   return (
     <Badge className={orderStatusStyles[status]} variant="outline">
       {orderStatusLabels[status]}
+    </Badge>
+  );
+}
+
+export function OrderInventoryStatusBadge({ status }: { status: Order["inventoryStatus"] }) {
+  return (
+    <Badge className={orderInventoryStatusStyles[status]} variant="outline">
+      {orderInventoryStatusLabels[status]}
     </Badge>
   );
 }

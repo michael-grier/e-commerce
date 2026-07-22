@@ -1,7 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 
-import { OrderStatusBadge } from "@/components/admin/status-badge";
+import { OrderInventoryStatusBadge, OrderStatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAdminDate } from "@/lib/admin/format";
 import { getAdminOrders } from "@/lib/admin/queries";
@@ -27,6 +27,7 @@ export default async function AdminOrdersPage() {
               <tr>
                 <TableHeading>Order</TableHeading>
                 <TableHeading>Status</TableHeading>
+                <TableHeading>Inventory</TableHeading>
                 <TableHeading>Customer</TableHeading>
                 <TableHeading>Items</TableHeading>
                 <TableHeading>Total</TableHeading>
@@ -44,6 +45,9 @@ export default async function AdminOrdersPage() {
                   </td>
                   <td className="px-4 py-4 align-top">
                     <OrderStatusBadge status={order.status} />
+                  </td>
+                  <td className="px-4 py-4 align-top">
+                    <OrderInventoryStatusBadge status={order.inventoryStatus} />
                   </td>
                   <td className="px-4 py-4 align-top">{order.email}</td>
                   <td className="px-4 py-4 align-top">

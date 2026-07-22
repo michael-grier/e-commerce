@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getDb } from "@/lib/db/client";
@@ -11,16 +11,25 @@ export async function getAdminDashboardSummary() {
   await requireAdmin();
 
   const db = getDb();
-  const [productRows, orderRows, awaitingFulfillmentRows] = await Promise.all([
-    db.select({ count: count() }).from(products),
-    db.select({ count: count() }).from(orders),
-    db.select({ count: count() }).from(orders).where(eq(orders.status, "paid")),
-  ]);
+  const [productRows, orderRows, awaitingFulfillmentRows, inventoryExceptionRows] =
+    await Promise.all([
+      db.select({ count: count() }).from(products),
+      db.select({ count: count() }).from(orders),
+      db
+        .select({ count: count() })
+        .from(orders)
+        .where(and(eq(orders.status, "paid"), eq(orders.inventoryStatus, "allocated"))),
+      db
+        .select({ count: count() })
+        .from(orders)
+        .where(and(eq(orders.status, "paid"), eq(orders.inventoryStatus, "exception"))),
+    ]);
 
   return {
     productCount: productRows[0]?.count ?? 0,
     orderCount: orderRows[0]?.count ?? 0,
     awaitingFulfillmentCount: awaitingFulfillmentRows[0]?.count ?? 0,
+    inventoryExceptionCount: inventoryExceptionRows[0]?.count ?? 0,
   };
 }
 
@@ -80,6 +89,7 @@ export async function getAdminOrders() {
       orderNumber: true,
       email: true,
       status: true,
+      inventoryStatus: true,
       totalCents: true,
       currency: true,
       createdAt: true,

@@ -16,10 +16,11 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <dl className="grid gap-4 sm:grid-cols-3">
+      <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Products" value={summary.productCount} />
         <SummaryCard label="Orders" value={summary.orderCount} />
         <SummaryCard label="Awaiting fulfillment" value={summary.awaitingFulfillmentCount} />
+        <SummaryCard label="Inventory exceptions" value={summary.inventoryExceptionCount} />
       </dl>
 
       <div className="flex flex-wrap gap-3">

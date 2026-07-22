@@ -5,7 +5,15 @@ import {
   OrderFulfillmentError,
   type OrderFulfillmentRepository,
 } from "@/lib/orders/mark-order-shipped";
-import { markOrderShippedSchema } from "@/lib/validators/admin";
+import {
+  type InventoryExceptionRepository,
+  InventoryExceptionResolutionError,
+  resolveInventoryException,
+} from "@/lib/orders/resolve-inventory-exception";
+import {
+  markOrderShippedSchema,
+  retryOrderInventoryAllocationSchema,
+} from "@/lib/validators/admin";
 
 const orderId = "823071ff-f180-43ed-82df-af334ccfe35a";
 
@@ -14,7 +22,10 @@ function makeRepository(
 ): OrderFulfillmentRepository {
   return {
     markPaidOrderFulfilled: mock(async () => true),
-    findOrderStatus: mock(async (): Promise<"paid"> => "paid"),
+    findOrderFulfillmentState: mock(async () => ({
+      status: "paid" as const,
+      inventoryStatus: "allocated" as const,
+    })),
     ...overrides,
   };
 }
@@ -24,6 +35,7 @@ describe("mark order shipped contract", () => {
     expect(markOrderShippedSchema.parse({ orderId })).toEqual({ orderId });
     expect(() => markOrderShippedSchema.parse({ orderId: "not-an-order" })).toThrow();
     expect(() => markOrderShippedSchema.parse({ orderId, status: "refunded" })).toThrow();
+    expect(retryOrderInventoryAllocationSchema.parse({ orderId })).toEqual({ orderId });
   });
 
   test("conditionally changes a paid order to fulfilled", async () => {
@@ -31,13 +43,16 @@ describe("mark order shipped contract", () => {
 
     await expect(markOrderShipped(orderId, repository)).resolves.toEqual({ changed: true });
     expect(repository.markPaidOrderFulfilled).toHaveBeenCalledWith(orderId);
-    expect(repository.findOrderStatus).not.toHaveBeenCalled();
+    expect(repository.findOrderFulfillmentState).not.toHaveBeenCalled();
   });
 
   test("treats an already fulfilled order as an idempotent success", async () => {
     const repository = makeRepository({
       markPaidOrderFulfilled: mock(async () => false),
-      findOrderStatus: mock(async (): Promise<"fulfilled"> => "fulfilled"),
+      findOrderFulfillmentState: mock(async () => ({
+        status: "fulfilled" as const,
+        inventoryStatus: "allocated" as const,
+      })),
     });
 
     await expect(markOrderShipped(orderId, repository)).resolves.toEqual({ changed: false });
@@ -46,11 +61,14 @@ describe("mark order shipped contract", () => {
   test("rejects missing orders and invalid status transitions", async () => {
     const missingOrderRepository = makeRepository({
       markPaidOrderFulfilled: mock(async () => false),
-      findOrderStatus: mock(async (): Promise<null> => null),
+      findOrderFulfillmentState: mock(async (): Promise<null> => null),
     });
     const refundedOrderRepository = makeRepository({
       markPaidOrderFulfilled: mock(async () => false),
-      findOrderStatus: mock(async (): Promise<"refunded"> => "refunded"),
+      findOrderFulfillmentState: mock(async () => ({
+        status: "refunded" as const,
+        inventoryStatus: "allocated" as const,
+      })),
     });
 
     await expect(markOrderShipped(orderId, missingOrderRepository)).rejects.toEqual(
@@ -58,6 +76,53 @@ describe("mark order shipped contract", () => {
     );
     await expect(markOrderShipped(orderId, refundedOrderRepository)).rejects.toEqual(
       new OrderFulfillmentError("Only paid orders can be marked as shipped.", "invalid_status"),
+    );
+  });
+
+  test("blocks fulfillment while a paid order has an inventory exception", async () => {
+    const repository = makeRepository({
+      markPaidOrderFulfilled: mock(async () => false),
+      findOrderFulfillmentState: mock(async () => ({
+        status: "paid" as const,
+        inventoryStatus: "exception" as const,
+      })),
+    });
+
+    await expect(markOrderShipped(orderId, repository)).rejects.toEqual(
+      new OrderFulfillmentError(
+        "Resolve the inventory exception before marking this order as shipped.",
+        "invalid_status",
+      ),
+    );
+  });
+});
+
+describe("inventory exception resolution", () => {
+  function makeInventoryRepository(
+    result: Awaited<ReturnType<InventoryExceptionRepository["allocateInventoryForException"]>>,
+  ): InventoryExceptionRepository {
+    return {
+      allocateInventoryForException: mock(async () => result),
+    };
+  }
+
+  test("allocates corrected stock once and treats a replay as idempotent", async () => {
+    await expect(
+      resolveInventoryException(orderId, makeInventoryRepository("allocated")),
+    ).resolves.toEqual({ changed: true });
+    await expect(
+      resolveInventoryException(orderId, makeInventoryRepository("already_allocated")),
+    ).resolves.toEqual({ changed: false });
+  });
+
+  test("keeps the exception when inventory is still insufficient", async () => {
+    await expect(
+      resolveInventoryException(orderId, makeInventoryRepository("insufficient_inventory")),
+    ).rejects.toEqual(
+      new InventoryExceptionResolutionError(
+        "Inventory is still insufficient. Restock the affected variants and try again.",
+        "insufficient_inventory",
+      ),
     );
   });
 });

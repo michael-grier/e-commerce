@@ -94,6 +94,20 @@ Restore the product price and inventory after these checks.
 
 ## 7. Webhook Replay And Idempotency
 
+Before replaying an event, verify the competing-checkout exception path against the disposable
+database branch:
+
+- [ ] Set a test variant's inventory to one and open two hosted Checkout Sessions for that unit
+      before paying either Session.
+- [ ] Complete both payments with Stripe sandbox cards; both webhook deliveries succeed and both
+      paid orders appear in admin.
+- [ ] Exactly one order shows allocated inventory, the other shows an inventory exception, and
+      inventory is zero rather than negative.
+- [ ] The exception order cannot be marked shipped.
+- [ ] Restock one unit, retry allocation from the exception order, and confirm inventory returns to
+      zero while the exception changes to allocated.
+- [ ] Retrying allocation again does not decrement inventory a second time.
+
 Use a Stripe-registered sandbox endpoint, such as a preview deployment. Follow Stripe's
 [webhook retry guidance](https://docs.stripe.com/webhooks), find the original event and endpoint IDs
 in Stripe Workbench, then either click **Resend** on the event or run:

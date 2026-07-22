@@ -22,7 +22,8 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
 - Checkout re-reads product prices and inventory from Postgres.
 - Stripe owns payment, tax, and hosted payment UI.
 - Orders are created only by the verified Stripe webhook after payment.
-- Paid order creation snapshots items and conditionally decrements inventory in one transaction.
+- Paid order creation snapshots items and either allocates all inventory or records an explicit
+  inventory exception in one transaction.
 - `pending_checkouts` bridges Checkout Session creation to the webhook with a short metadata token
   and an immutable copy of the resolved names, prices, quantities, and currency instead of storing
   cart JSON directly in Stripe metadata.
@@ -85,8 +86,15 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe
 ```
 
 Store the listener's `whsec_...` signing secret as `STRIPE_WEBHOOK_SECRET` in `.env.local`.
-Verified paid Checkout events create one order, snapshot its items, conditionally decrement
-inventory in the same transaction, and mark the pending checkout completed.
+Verified paid Checkout events always create one idempotent paid order. The transaction locks the
+affected variants and either decrements every item or records an inventory exception without a
+partial decrement, then marks the pending checkout completed. Inventory exceptions are visible in
+admin, block fulfillment, and can be retried after an operator corrects stock.
+
+Migration `0002_chubby_grandmaster` adds the inventory allocation state and fulfillment constraint.
+Its non-null `allocated` default safely backfills existing orders. Deploy the migration before this
+application version; for rollback, deploy the previous application first, then remove the
+constraint, column, and enum after confirming no inventory-exception orders require reconciliation.
 
 Migration `0001_sweet_zaladane` adds immutable line snapshots without rewriting existing pending
 checkouts because their original Checkout names and prices cannot be reconstructed safely from the
