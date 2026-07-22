@@ -1,17 +1,18 @@
 import "server-only";
 
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
-import { orderItems, orders, pendingCheckouts, products, productVariants } from "@/lib/db/schema";
+import { orderItems, orders, pendingCheckouts, productVariants } from "@/lib/db/schema";
 import {
   assertInventoryDecremented,
+  assertPendingCheckoutItemsMatchSnapshots,
   PaidOrderError,
   type PaidOrderWriter,
+  parsePendingCheckoutLineSnapshots,
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import { makeOrderNumber } from "@/lib/orders/order-number";
-import { cartSchema } from "@/lib/validators/cart";
 
 export const paidOrderRepository: PaidOrderWriter = {
   async createPaidOrder(checkout) {
@@ -42,19 +43,9 @@ export const paidOrderRepository: PaidOrderWriter = {
         throw new PaidOrderError("Pending checkout is completed without a matching order.");
       }
 
-      const cartLines = cartSchema.parse(pendingCheckout.items);
-      const variantIds = cartLines.map((line) => line.variantId);
-      const variants = await tx
-        .select({
-          id: productVariants.id,
-          productName: products.name,
-          variantName: productVariants.name,
-          priceCents: productVariants.priceCents,
-        })
-        .from(productVariants)
-        .innerJoin(products, eq(products.id, productVariants.productId))
-        .where(inArray(productVariants.id, variantIds));
-      const snapshots = resolveOrderItemSnapshots(cartLines, variants);
+      const lineSnapshots = parsePendingCheckoutLineSnapshots(pendingCheckout.lineItems);
+      assertPendingCheckoutItemsMatchSnapshots(pendingCheckout.items, lineSnapshots);
+      const snapshots = resolveOrderItemSnapshots(lineSnapshots, checkout);
       const [order] = await tx
         .insert(orders)
         .values({

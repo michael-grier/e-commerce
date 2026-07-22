@@ -11,6 +11,7 @@ import { CheckoutError } from "@/lib/checkout/errors";
 import {
   buildStripeLineItems,
   type CheckoutVariantRecord,
+  createPendingCheckoutLineSnapshots,
   resolveCheckoutLines,
 } from "@/lib/checkout/items";
 import { buildShippingOptions, parseAllowedShippingCountries } from "@/lib/checkout/shipping";
@@ -210,7 +211,7 @@ describe("hosted checkout orchestration", () => {
     expect(repositoryCalled).toBe(false);
   });
 
-  test("persists cart intent and links compact metadata to the Stripe session", async () => {
+  test("persists immutable resolved lines and links compact metadata to the Stripe session", async () => {
     const pendingWrites: Parameters<CheckoutRepository["createPendingCheckout"]>[0][] = [];
     const sessionLinks: Array<{ token: string; sessionId: string }> = [];
     let sessionParams: Stripe.Checkout.SessionCreateParams | undefined;
@@ -256,6 +257,16 @@ describe("hosted checkout orchestration", () => {
       {
         token: "checkout_abcDEF123456789",
         items: [{ variantId, quantity: 2 }],
+        lineItems: [
+          {
+            variantId,
+            productName: "Database Deck",
+            variantName: '8.25"',
+            unitPriceCents: 8900,
+            quantity: 2,
+            currency: "cad",
+          },
+        ],
         expiresAt: new Date("2026-07-10T13:00:00.000Z"),
       },
     ]);
@@ -269,6 +280,29 @@ describe("hosted checkout orchestration", () => {
     expect(sessionParams?.automatic_tax).toEqual({ enabled: true });
     expect(sessionParams?.shipping_address_collection?.allowed_countries).toEqual(["CA", "US"]);
     expect(sessionLinks).toEqual([{ token: "checkout_abcDEF123456789", sessionId: "cs_test_123" }]);
+  });
+
+  test("derives pending snapshots from the same resolved lines sent to Stripe", () => {
+    const [resolvedLine] = resolveCheckoutLines([{ variantId, quantity: 2 }], [activeVariant]);
+
+    expect(createPendingCheckoutLineSnapshots([resolvedLine])).toEqual([
+      {
+        variantId,
+        productName: "Database Deck",
+        variantName: '8.25"',
+        unitPriceCents: 8900,
+        quantity: 2,
+        currency: "cad",
+      },
+    ]);
+    expect(buildStripeLineItems([resolvedLine])[0]).toMatchObject({
+      quantity: 2,
+      price_data: {
+        currency: "cad",
+        unit_amount: 8900,
+        product_data: { name: "Database Deck", description: '8.25"' },
+      },
+    });
   });
 
   test("can disable Stripe Tax while preserving hosted Checkout", async () => {

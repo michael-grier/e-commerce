@@ -1,8 +1,11 @@
 import type Stripe from "stripe";
 
+import type { PendingCheckoutLineSnapshot } from "@/lib/db/schema";
 import type { CartLine } from "@/lib/validators/cart";
 
 import { CheckoutError } from "./errors";
+
+export const checkoutCurrency = "cad";
 
 export type CheckoutVariantRecord = {
   id: string;
@@ -61,7 +64,7 @@ export function buildStripeLineItems(
   return lines.map((line) => ({
     quantity: line.quantity,
     price_data: {
-      currency: "cad",
+      currency: checkoutCurrency,
       unit_amount: line.priceCents,
       tax_behavior: "exclusive",
       product_data: {
@@ -69,6 +72,19 @@ export function buildStripeLineItems(
         description: line.variantName,
       },
     },
+  }));
+}
+
+export function createPendingCheckoutLineSnapshots(
+  lines: ResolvedCheckoutLine[],
+): PendingCheckoutLineSnapshot[] {
+  return lines.map((line) => ({
+    variantId: line.id,
+    productName: line.productName,
+    variantName: line.variantName,
+    unitPriceCents: line.priceCents,
+    quantity: line.quantity,
+    currency: checkoutCurrency,
   }));
 }
 

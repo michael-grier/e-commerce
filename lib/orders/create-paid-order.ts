@@ -1,4 +1,6 @@
-import type { CartLine } from "@/lib/validators/cart";
+import type { PendingCheckoutLineSnapshot } from "@/lib/db/schema";
+import { cartSchema } from "@/lib/validators/cart";
+import { pendingCheckoutLineSnapshotsSchema } from "@/lib/validators/pending-checkout";
 
 export type PaidCheckoutData = {
   pendingCheckoutToken: string;
@@ -11,13 +13,6 @@ export type PaidCheckoutData = {
   totalCents: number;
   currency: string;
   shippingAddress: Record<string, unknown> | null;
-};
-
-export type OrderSnapshotVariant = {
-  id: string;
-  productName: string;
-  variantName: string;
-  priceCents: number;
 };
 
 export type OrderItemSnapshot = {
@@ -51,27 +46,77 @@ export class InventoryUnavailableError extends PaidOrderError {
   }
 }
 
+export function parsePendingCheckoutLineSnapshots(input: unknown): PendingCheckoutLineSnapshot[] {
+  if (input === null || input === undefined) {
+    throw new PaidOrderError(
+      "Pending checkout predates immutable line snapshots and requires reconciliation.",
+    );
+  }
+
+  const parsed = pendingCheckoutLineSnapshotsSchema.safeParse(input);
+
+  if (!parsed.success) {
+    throw new PaidOrderError("Pending checkout has invalid immutable line snapshots.");
+  }
+
+  return parsed.data;
+}
+
+export function assertPendingCheckoutItemsMatchSnapshots(
+  input: unknown,
+  lineSnapshots: PendingCheckoutLineSnapshot[],
+): void {
+  const parsedItems = cartSchema.safeParse(input);
+
+  if (!parsedItems.success) {
+    throw new PaidOrderError("Pending checkout has invalid cart items.");
+  }
+
+  const quantitiesByVariantId = new Map<string, number>();
+
+  for (const item of parsedItems.data) {
+    quantitiesByVariantId.set(
+      item.variantId,
+      (quantitiesByVariantId.get(item.variantId) ?? 0) + item.quantity,
+    );
+  }
+
+  if (
+    quantitiesByVariantId.size !== lineSnapshots.length ||
+    lineSnapshots.some((line) => quantitiesByVariantId.get(line.variantId) !== line.quantity)
+  ) {
+    throw new PaidOrderError("Pending checkout cart items do not match its line snapshots.");
+  }
+}
+
 export function resolveOrderItemSnapshots(
-  cartLines: CartLine[],
-  variants: OrderSnapshotVariant[],
+  lineSnapshots: PendingCheckoutLineSnapshot[],
+  checkout: Pick<PaidCheckoutData, "currency" | "subtotalCents">,
 ): OrderItemSnapshot[] {
-  const variantsById = new Map(variants.map((variant) => [variant.id, variant]));
+  let snapshotSubtotalCents = 0;
 
-  return cartLines.map((line) => {
-    const variant = variantsById.get(line.variantId);
-
-    if (!variant) {
-      throw new PaidOrderError(`Variant ${line.variantId} is unavailable for order snapshotting.`);
+  for (const line of lineSnapshots) {
+    if (line.currency !== checkout.currency) {
+      throw new PaidOrderError("Pending checkout line currency does not match the Stripe Session.");
     }
 
-    return {
-      variantId: variant.id,
-      productNameSnapshot: variant.productName,
-      variantNameSnapshot: variant.variantName,
-      unitPriceCentsSnapshot: variant.priceCents,
-      quantity: line.quantity,
-    };
-  });
+    snapshotSubtotalCents += line.unitPriceCents * line.quantity;
+  }
+
+  if (
+    !Number.isSafeInteger(snapshotSubtotalCents) ||
+    snapshotSubtotalCents !== checkout.subtotalCents
+  ) {
+    throw new PaidOrderError("Pending checkout line subtotal does not match the Stripe Session.");
+  }
+
+  return lineSnapshots.map((line) => ({
+    variantId: line.variantId,
+    productNameSnapshot: line.productName,
+    variantNameSnapshot: line.variantName,
+    unitPriceCentsSnapshot: line.unitPriceCents,
+    quantity: line.quantity,
+  }));
 }
 
 export function assertInventoryDecremented(

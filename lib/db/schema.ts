@@ -23,6 +23,15 @@ export type PendingCheckoutItem = {
   quantity: number;
 };
 
+export type PendingCheckoutLineSnapshot = {
+  variantId: string;
+  productName: string;
+  variantName: string;
+  unitPriceCents: number;
+  quantity: number;
+  currency: string;
+};
+
 export type JsonRecord = Record<string, unknown>;
 
 const timestamps = {
@@ -92,6 +101,7 @@ export const pendingCheckouts = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     token: text("token").notNull(),
     items: jsonb("items").$type<PendingCheckoutItem[]>().notNull(),
+    lineItems: jsonb("line_items").$type<PendingCheckoutLineSnapshot[]>(),
     stripeSessionId: text("stripe_session_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -101,6 +111,10 @@ export const pendingCheckouts = pgTable(
     uniqueIndex("pending_checkouts_token_unique").on(table.token),
     uniqueIndex("pending_checkouts_stripe_session_id_unique").on(table.stripeSessionId),
     index("pending_checkouts_expires_at_idx").on(table.expiresAt),
+    check(
+      "pending_checkouts_line_items_nonempty_array",
+      sql`${table.lineItems} is null or (jsonb_typeof(${table.lineItems}) = 'array' and jsonb_array_length(${table.lineItems}) > 0)`,
+    ),
   ],
 );
 

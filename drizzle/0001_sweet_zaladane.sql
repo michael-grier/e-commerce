@@ -1,0 +1,2 @@
+ALTER TABLE "pending_checkouts" ADD COLUMN "line_items" jsonb;--> statement-breakpoint
+ALTER TABLE "pending_checkouts" ADD CONSTRAINT "pending_checkouts_line_items_nonempty_array" CHECK ("pending_checkouts"."line_items" is null or (jsonb_typeof("pending_checkouts"."line_items") = 'array' and jsonb_array_length("pending_checkouts"."line_items") > 0));

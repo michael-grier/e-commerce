@@ -4,11 +4,12 @@ import { z } from "zod";
 import {
   buildStripeLineItems,
   type CheckoutVariantRecord,
+  createPendingCheckoutLineSnapshots,
   getCheckoutSubtotalCents,
   resolveCheckoutLines,
 } from "@/lib/checkout/items";
 import { type AllowedShippingCountry, buildShippingOptions } from "@/lib/checkout/shipping";
-import type { PendingCheckoutItem } from "@/lib/db/schema";
+import type { PendingCheckoutItem, PendingCheckoutLineSnapshot } from "@/lib/db/schema";
 import { checkoutSchema } from "@/lib/validators/cart";
 
 import { CheckoutError } from "./errors";
@@ -20,6 +21,7 @@ export type CheckoutRepository = {
   createPendingCheckout: (checkout: {
     token: string;
     items: PendingCheckoutItem[];
+    lineItems: PendingCheckoutLineSnapshot[];
     expiresAt: Date;
   }) => Promise<void>;
   setStripeSessionId: (token: string, stripeSessionId: string) => Promise<void>;
@@ -56,6 +58,7 @@ export async function createHostedCheckout(
   const variants = await dependencies.repository.findVariants(variantIds);
   const resolvedLines = resolveCheckoutLines(items, variants);
   const pendingItems = resolvedLines.map(({ id, quantity }) => ({ variantId: id, quantity }));
+  const pendingLineItems = createPendingCheckoutLineSnapshots(resolvedLines);
   const token = dependencies.createToken();
   const expiresAt = new Date(
     (dependencies.now?.() ?? new Date()).getTime() + pendingCheckoutLifetimeMs,
@@ -64,6 +67,7 @@ export async function createHostedCheckout(
   await dependencies.repository.createPendingCheckout({
     token,
     items: pendingItems,
+    lineItems: pendingLineItems,
     expiresAt,
   });
 
