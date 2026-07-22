@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commerce Integrity"
+  short_description: "Protect payment and order invariants"
+  default_prompt: "Use $commerce-integrity to review and implement this commerce-critical change safely."

@@ -1,0 +1,3 @@
+# Project-specific MCP servers. Shared servers such as Clerk are configured globally.
+[mcp_servers.neon]
+url = "https://mcp.neon.tech/mcp"
