@@ -149,6 +149,18 @@ describe("post-commit email boundary", () => {
         () => {},
       ),
     ).toBe(false);
+    expect(
+      await sendConfirmationAfterOrderCommit(
+        {
+          handled: true,
+          paymentUpdated: true,
+          changed: true,
+          orderId: delivery.orderId,
+        },
+        send,
+        () => {},
+      ),
+    ).toBe(false);
     expect(await sendConfirmationAfterOrderCommit({ handled: false }, send, () => {})).toBe(false);
     expect(sentOrderIds).toEqual([delivery.orderId]);
   });

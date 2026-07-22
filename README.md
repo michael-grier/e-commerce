@@ -91,6 +91,16 @@ affected variants and either decrements every item or records an inventory excep
 partial decrement, then marks the pending checkout completed. Inventory exceptions are visible in
 admin, block fulfillment, and can be retried after an operator corrects stock.
 
+Also forward `charge.refunded` and all `charge.dispute.*` lifecycle events. These events are
+deduplicated by Stripe event ID and reconciled to orders through the persisted Payment Intent ID.
+Refund totals only move forward, while dispute state uses Stripe event time so delayed delivery
+cannot overwrite a newer state. Events that arrive before their paid Checkout event are retained
+and applied when the order is created.
+
+Fully refunded orders and orders with open, lost, or prevented disputes are excluded from
+fulfillment. Partial refunds remain visible to the operator without automatically cancelling the
+remaining fulfillment.
+
 Migration `0002_chubby_grandmaster` adds the inventory allocation state and fulfillment constraint.
 Its non-null `allocated` default safely backfills existing orders. Deploy the migration before this
 application version; for rollback, deploy the previous application first, then remove the
@@ -102,6 +112,10 @@ mutable catalog. For a zero-overlap rollout, pause new Checkout creation, apply 
 pre-deployment Checkout Sessions expire (up to one hour), deploy the application, and then resume
 Checkout. If a legacy Session is paid during rollout, its webhook fails explicitly for manual
 Stripe reconciliation instead of recording potentially incorrect receipt lines.
+
+The payment-lifecycle migration adds durable refund and dispute state, a Stripe event ledger, and a
+unique Payment Intent lookup. Review its
+[deployment and rollback notes](docs/migrations/0003-payment-lifecycle.md) before applying it.
 
 Order confirmations use the persisted order and item snapshots after that transaction commits.
 Configure `RESEND_API_KEY`, `EMAIL_FROM`, and `SUPPORT_EMAIL` to enable delivery. Resend failures

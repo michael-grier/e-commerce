@@ -1,10 +1,19 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
-import { orderInventoryStatusValues, orderItems, orderStatusValues, orders } from "@/lib/db/schema";
+import {
+  disputeStatusValues,
+  orderInventoryStatusValues,
+  orderItems,
+  orderStatusValues,
+  orders,
+  refundStatusValues,
+} from "@/lib/db/schema";
 
 export const orderStatusSchema = z.enum(orderStatusValues);
 export const orderInventoryStatusSchema = z.enum(orderInventoryStatusValues);
+export const refundStatusSchema = z.enum(refundStatusValues);
+export const disputeStatusSchema = z.enum(disputeStatusValues);
 export const shippingAddressSchema = z.record(z.string(), z.unknown()).nullable();
 
 export const orderSelectSchema = createSelectSchema(orders, {
@@ -13,16 +22,24 @@ export const orderSelectSchema = createSelectSchema(orders, {
 
 export const orderInsertSchema = createInsertSchema(orders, {
   email: (schema) => schema.email(),
+  refundStatus: refundStatusSchema,
+  refundedCents: (schema) => schema.int().nonnegative(),
+  disputeStatus: disputeStatusSchema,
   subtotalCents: (schema) => schema.int().nonnegative(),
   taxCents: (schema) => schema.int().nonnegative(),
   shippingCents: (schema) => schema.int().nonnegative(),
   totalCents: (schema) => schema.int().nonnegative(),
   currency: (schema) => schema.length(3).toLowerCase(),
   shippingAddress: shippingAddressSchema,
-}).omit({
-  id: true,
-  createdAt: true,
-});
+})
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .refine((order) => (order.refundedCents ?? 0) <= order.totalCents, {
+    message: "Refunded amount cannot exceed the order total.",
+    path: ["refundedCents"],
+  });
 
 export const orderUpdateSchema = createUpdateSchema(orders, {
   status: orderStatusSchema,

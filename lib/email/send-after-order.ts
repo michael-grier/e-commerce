@@ -8,7 +8,7 @@ export async function sendConfirmationAfterOrderCommit(
   sendConfirmation: OrderConfirmationSender,
   reportError: EmailErrorReporter,
 ): Promise<boolean> {
-  if (!result.handled || !result.created) {
+  if (!result.handled || !("created" in result) || !result.created) {
     return false;
   }
 

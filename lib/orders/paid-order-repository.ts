@@ -3,7 +3,13 @@ import "server-only";
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
-import { orderItems, orders, pendingCheckouts, productVariants } from "@/lib/db/schema";
+import {
+  orderItems,
+  orders,
+  pendingCheckouts,
+  productVariants,
+  stripePaymentEvents,
+} from "@/lib/db/schema";
 import {
   assertInventoryDecremented,
   assertPendingCheckoutItemsMatchSnapshots,
@@ -14,10 +20,20 @@ import {
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import { makeOrderNumber } from "@/lib/orders/order-number";
+import {
+  derivePaymentLifecycleState,
+  type PaymentLifecycleUpdate,
+} from "@/lib/orders/payment-lifecycle";
 
 export const paidOrderRepository: PaidOrderWriter = {
   async createPaidOrder(checkout) {
     return getDb().transaction(async (tx) => {
+      if (checkout.stripePaymentIntentId) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${checkout.stripePaymentIntentId}))`,
+        );
+      }
+
       const existingOrder = await tx.query.orders.findFirst({
         columns: { id: true },
         where: (orders, { eq }) => eq(orders.stripeSessionId, checkout.stripeSessionId),
@@ -58,15 +74,29 @@ export const paidOrderRepository: PaidOrderWriter = {
         .orderBy(asc(productVariants.id))
         .for("update");
       const allocation = planInventoryAllocation(snapshots, variants);
+      const paymentEvents = checkout.stripePaymentIntentId
+        ? await tx
+            .select()
+            .from(stripePaymentEvents)
+            .where(eq(stripePaymentEvents.stripePaymentIntentId, checkout.stripePaymentIntentId))
+        : [];
+      const paymentState = derivePaymentLifecycleState(
+        checkout.totalCents,
+        checkout.currency,
+        paymentEvents.map(toPaymentLifecycleUpdate),
+      );
       const [order] = await tx
         .insert(orders)
         .values({
           orderNumber: makeOrderNumber(),
           email: checkout.email,
-          status: "paid",
+          status: paymentState.refundStatus === "full" ? "refunded" : "paid",
           inventoryStatus: allocation.status,
           stripeSessionId: checkout.stripeSessionId,
           stripePaymentIntentId: checkout.stripePaymentIntentId,
+          refundStatus: paymentState.refundStatus,
+          refundedCents: paymentState.refundedCents,
+          disputeStatus: paymentState.disputeStatus,
           subtotalCents: checkout.subtotalCents,
           taxCents: checkout.taxCents,
           shippingCents: checkout.shippingCents,
@@ -133,3 +163,17 @@ export const paidOrderRepository: PaidOrderWriter = {
     });
   },
 };
+
+function toPaymentLifecycleUpdate(
+  event: typeof stripePaymentEvents.$inferSelect,
+): PaymentLifecycleUpdate {
+  return {
+    stripeEventId: event.stripeEventId,
+    stripePaymentIntentId: event.stripePaymentIntentId,
+    kind: event.kind,
+    refundedCents: event.refundedCents,
+    currency: event.currency,
+    disputeStatus: event.disputeStatus === "none" ? null : event.disputeStatus,
+    occurredAt: event.occurredAt,
+  };
+}

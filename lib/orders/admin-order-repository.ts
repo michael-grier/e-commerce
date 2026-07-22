@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
 import { orderItems, orders, productVariants } from "@/lib/db/schema";
@@ -9,28 +9,53 @@ import {
   planInventoryAllocation,
 } from "@/lib/orders/create-paid-order";
 import type { OrderFulfillmentRepository } from "@/lib/orders/mark-order-shipped";
+import { isOrderFulfillmentEligible } from "@/lib/orders/payment-lifecycle";
 import type { InventoryExceptionRepository } from "@/lib/orders/resolve-inventory-exception";
 
 export const adminOrderRepository: OrderFulfillmentRepository & InventoryExceptionRepository = {
   async markPaidOrderFulfilled(orderId) {
-    const updatedOrders = await getDb()
-      .update(orders)
-      .set({ status: "fulfilled" })
-      .where(
-        and(
-          eq(orders.id, orderId),
-          eq(orders.status, "paid"),
-          eq(orders.inventoryStatus, "allocated"),
-        ),
-      )
-      .returning({ id: orders.id });
+    return getDb().transaction(async (tx) => {
+      const order = await tx.query.orders.findFirst({
+        columns: { stripePaymentIntentId: true },
+        where: (orders, { eq }) => eq(orders.id, orderId),
+      });
 
-    return updatedOrders.length === 1;
+      if (!order) {
+        return false;
+      }
+
+      if (order.stripePaymentIntentId) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${order.stripePaymentIntentId}))`,
+        );
+      }
+
+      const updatedOrders = await tx
+        .update(orders)
+        .set({ status: "fulfilled" })
+        .where(
+          and(
+            eq(orders.id, orderId),
+            eq(orders.status, "paid"),
+            eq(orders.inventoryStatus, "allocated"),
+            ne(orders.refundStatus, "full"),
+            inArray(orders.disputeStatus, ["none", "won"]),
+          ),
+        )
+        .returning({ id: orders.id });
+
+      return updatedOrders.length === 1;
+    });
   },
 
   async findOrderFulfillmentState(orderId) {
     const order = await getDb().query.orders.findFirst({
-      columns: { status: true, inventoryStatus: true },
+      columns: {
+        status: true,
+        inventoryStatus: true,
+        refundStatus: true,
+        disputeStatus: true,
+      },
       where: (orders, { eq }) => eq(orders.id, orderId),
     });
 
@@ -39,11 +64,28 @@ export const adminOrderRepository: OrderFulfillmentRepository & InventoryExcepti
 
   async allocateInventoryForException(orderId) {
     return getDb().transaction(async (tx) => {
+      const paymentIdentity = await tx.query.orders.findFirst({
+        columns: { stripePaymentIntentId: true },
+        where: (orders, { eq }) => eq(orders.id, orderId),
+      });
+
+      if (!paymentIdentity) {
+        return "not_found";
+      }
+
+      if (paymentIdentity.stripePaymentIntentId) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${paymentIdentity.stripePaymentIntentId}))`,
+        );
+      }
+
       const [order] = await tx
         .select({
           id: orders.id,
           status: orders.status,
           inventoryStatus: orders.inventoryStatus,
+          refundStatus: orders.refundStatus,
+          disputeStatus: orders.disputeStatus,
         })
         .from(orders)
         .where(eq(orders.id, orderId))
@@ -53,7 +95,7 @@ export const adminOrderRepository: OrderFulfillmentRepository & InventoryExcepti
         return "not_found";
       }
 
-      if (order.status !== "paid") {
+      if (!isOrderFulfillmentEligible(order)) {
         return "invalid_status";
       }
 

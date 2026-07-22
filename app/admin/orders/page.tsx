@@ -1,7 +1,12 @@
 import type { Route } from "next";
 import Link from "next/link";
 
-import { OrderInventoryStatusBadge, OrderStatusBadge } from "@/components/admin/status-badge";
+import {
+  DisputeStatusBadge,
+  OrderInventoryStatusBadge,
+  OrderStatusBadge,
+  RefundStatusBadge,
+} from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAdminDate } from "@/lib/admin/format";
 import { getAdminOrders } from "@/lib/admin/queries";
@@ -44,7 +49,15 @@ export default async function AdminOrdersPage() {
                     {order.orderNumber}
                   </td>
                   <td className="px-4 py-4 align-top">
-                    <OrderStatusBadge status={order.status} />
+                    <div className="flex flex-col items-start gap-1.5">
+                      <OrderStatusBadge status={order.status} />
+                      {order.refundStatus !== "none" ? (
+                        <RefundStatusBadge status={order.refundStatus} />
+                      ) : null}
+                      {order.disputeStatus !== "none" ? (
+                        <DisputeStatusBadge status={order.disputeStatus} />
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-4 align-top">
                     <OrderInventoryStatusBadge status={order.inventoryStatus} />
@@ -54,7 +67,12 @@ export default async function AdminOrdersPage() {
                     {order.items.reduce((total, item) => total + item.quantity, 0)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 align-top font-semibold">
-                    {formatMoney(order.totalCents, order.currency)}
+                    <span className="block">{formatMoney(order.totalCents, order.currency)}</span>
+                    {order.refundedCents > 0 ? (
+                      <span className="block font-normal text-muted-foreground text-xs">
+                        {formatMoney(order.refundedCents, order.currency)} refunded
+                      </span>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 align-top">
                     <time dateTime={order.createdAt.toISOString()}>
