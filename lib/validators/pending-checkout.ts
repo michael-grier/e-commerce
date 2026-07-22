@@ -1,22 +1,63 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 
+import { MAX_CART_LINE_QUANTITY, MAX_CART_LINES } from "@/lib/cart/constants";
 import { pendingCheckouts } from "@/lib/db/schema";
 import { cartSchema, pendingCheckoutTokenSchema } from "@/lib/validators/cart";
+
+export const pendingCheckoutLineSnapshotSchema = z
+  .object({
+    variantId: z.string().uuid(),
+    productName: z.string().trim().min(1).max(160),
+    variantName: z.string().trim().min(1).max(120),
+    unitPriceCents: z.number().int().nonnegative(),
+    quantity: z.number().int().positive().max(MAX_CART_LINE_QUANTITY),
+    currency: z
+      .string()
+      .length(3)
+      .regex(/^[a-z]{3}$/),
+  })
+  .strict();
+
+export const pendingCheckoutLineSnapshotsSchema = z
+  .array(pendingCheckoutLineSnapshotSchema)
+  .min(1)
+  .max(MAX_CART_LINES)
+  .superRefine((lines, context) => {
+    const variantIds = new Set<string>();
+
+    for (const [index, line] of lines.entries()) {
+      if (variantIds.has(line.variantId)) {
+        context.addIssue({
+          code: "custom",
+          message: "Each variant must have exactly one immutable line snapshot.",
+          path: [index, "variantId"],
+        });
+      }
+
+      variantIds.add(line.variantId);
+    }
+  });
 
 export const pendingCheckoutSelectSchema = createSelectSchema(pendingCheckouts, {
   token: pendingCheckoutTokenSchema,
   items: cartSchema,
+  lineItems: pendingCheckoutLineSnapshotsSchema.nullable(),
 });
 
 export const pendingCheckoutInsertSchema = createInsertSchema(pendingCheckouts, {
   token: pendingCheckoutTokenSchema,
   items: cartSchema,
-}).omit({
-  id: true,
-  createdAt: true,
-  completedAt: true,
-});
+})
+  .omit({
+    id: true,
+    createdAt: true,
+    completedAt: true,
+    lineItems: true,
+  })
+  .extend({
+    lineItems: pendingCheckoutLineSnapshotsSchema,
+  });
 
 export const pendingCheckoutUpdateSchema = createUpdateSchema(pendingCheckouts, {
   token: pendingCheckoutTokenSchema,
@@ -25,6 +66,7 @@ export const pendingCheckoutUpdateSchema = createUpdateSchema(pendingCheckouts, 
   id: true,
   token: true,
   items: true,
+  lineItems: true,
   createdAt: true,
   expiresAt: true,
 });

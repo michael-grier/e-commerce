@@ -5,6 +5,10 @@ import { parseEnv } from "@/lib/env";
 import { centsToDollars, dollarsToCents } from "@/lib/money";
 import { makeOrderNumber } from "@/lib/orders/order-number";
 import { checkoutSchema, pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
+import {
+  pendingCheckoutInsertSchema,
+  pendingCheckoutLineSnapshotsSchema,
+} from "@/lib/validators/pending-checkout";
 import { productInsertSchema, slugSchema } from "@/lib/validators/product";
 
 const variantId = "3f5277e9-b73f-4a94-9bc8-5f9d06f9f5d6";
@@ -33,6 +37,44 @@ describe("checkout contract", () => {
     ).toEqual({
       pendingCheckoutToken: "checkout_abcDEF123456789",
     });
+  });
+
+  test("requires strict immutable line snapshots for new pending checkouts", () => {
+    const lineItems = [
+      {
+        variantId,
+        productName: "Database Deck",
+        variantName: '8.25"',
+        unitPriceCents: 8900,
+        quantity: 1,
+        currency: "cad",
+      },
+    ];
+
+    expect(
+      pendingCheckoutInsertSchema.parse({
+        token: "checkout_abcDEF123456789",
+        items: [{ variantId, quantity: 1 }],
+        lineItems,
+        expiresAt: new Date("2026-07-22T18:00:00.000Z"),
+      }),
+    ).toMatchObject({ items: [{ variantId, quantity: 1 }], lineItems });
+    expect(
+      pendingCheckoutInsertSchema.safeParse({
+        token: "checkout_abcDEF123456789",
+        items: [{ variantId, quantity: 1 }],
+        expiresAt: new Date("2026-07-22T18:00:00.000Z"),
+      }).success,
+    ).toBe(false);
+    expect(
+      pendingCheckoutLineSnapshotsSchema.safeParse([
+        ...lineItems,
+        { ...lineItems[0], productName: "Duplicate" },
+      ]).success,
+    ).toBe(false);
+    expect(
+      pendingCheckoutLineSnapshotsSchema.safeParse([{ ...lineItems[0], currency: "CAD" }]).success,
+    ).toBe(false);
   });
 });
 

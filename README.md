@@ -24,7 +24,8 @@ guest checkout, server-authoritative pricing, and a small maintainable admin sur
 - Orders are created only by the verified Stripe webhook after payment.
 - Paid order creation snapshots items and conditionally decrements inventory in one transaction.
 - `pending_checkouts` bridges Checkout Session creation to the webhook with a short metadata token
-  instead of storing cart JSON directly in Stripe metadata.
+  and an immutable copy of the resolved names, prices, quantities, and currency instead of storing
+  cart JSON directly in Stripe metadata.
 - Admin access uses Clerk authentication plus an `ADMIN_USER_IDS` allowlist.
 
 ## Local Setup
@@ -86,6 +87,13 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe
 Store the listener's `whsec_...` signing secret as `STRIPE_WEBHOOK_SECRET` in `.env.local`.
 Verified paid Checkout events create one order, snapshot its items, conditionally decrement
 inventory in the same transaction, and mark the pending checkout completed.
+
+Migration `0001_sweet_zaladane` adds immutable line snapshots without rewriting existing pending
+checkouts because their original Checkout names and prices cannot be reconstructed safely from the
+mutable catalog. For a zero-overlap rollout, pause new Checkout creation, apply the migration, let
+pre-deployment Checkout Sessions expire (up to one hour), deploy the application, and then resume
+Checkout. If a legacy Session is paid during rollout, its webhook fails explicitly for manual
+Stripe reconciliation instead of recording potentially incorrect receipt lines.
 
 Order confirmations use the persisted order and item snapshots after that transaction commits.
 Configure `RESEND_API_KEY`, `EMAIL_FROM`, and `SUPPORT_EMAIL` to enable delivery. Resend failures

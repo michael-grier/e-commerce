@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type Stripe from "stripe";
 
+import { createPendingCheckoutLineSnapshots, resolveCheckoutLines } from "@/lib/checkout/items";
 import {
   assertInventoryDecremented,
+  assertPendingCheckoutItemsMatchSnapshots,
   InventoryUnavailableError,
   type PaidCheckoutData,
   PaidOrderError,
+  parsePendingCheckoutLineSnapshots,
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import {
@@ -218,19 +221,28 @@ describe("Stripe event processing", () => {
 });
 
 describe("paid order snapshots and inventory", () => {
-  test("builds immutable order item snapshots from current database values", () => {
+  test("keeps Checkout snapshots immutable when catalog values change before payment", () => {
+    const catalogAtCheckout = {
+      id: variantId,
+      productName: "Database Deck",
+      productStatus: "active" as const,
+      variantName: '8.25"',
+      priceCents: 8900,
+      inventoryQty: 3,
+    };
+    const pendingSnapshots = createPendingCheckoutLineSnapshots(
+      resolveCheckoutLines([{ variantId, quantity: 2 }], [catalogAtCheckout]),
+    );
+
+    catalogAtCheckout.productName = "Renamed Deck";
+    catalogAtCheckout.variantName = '8.5"';
+    catalogAtCheckout.priceCents = 9900;
+
     expect(
-      resolveOrderItemSnapshots(
-        [{ variantId, quantity: 2 }],
-        [
-          {
-            id: variantId,
-            productName: "Database Deck",
-            variantName: '8.25"',
-            priceCents: 8900,
-          },
-        ],
-      ),
+      resolveOrderItemSnapshots(parsePendingCheckoutLineSnapshots(pendingSnapshots), {
+        subtotalCents: 17800,
+        currency: "cad",
+      }),
     ).toEqual([
       {
         variantId,
@@ -242,10 +254,35 @@ describe("paid order snapshots and inventory", () => {
     ]);
   });
 
-  test("fails missing snapshots and conditional inventory misses", () => {
-    expect(() => resolveOrderItemSnapshots([{ variantId, quantity: 1 }], [])).toThrow(
+  test("rejects legacy, malformed, currency-mismatched, and unreconciled snapshots", () => {
+    const snapshot = {
+      variantId,
+      productName: "Database Deck",
+      variantName: '8.25"',
+      unitPriceCents: 8900,
+      quantity: 1,
+      currency: "cad",
+    };
+
+    expect(() => parsePendingCheckoutLineSnapshots(null)).toThrow(PaidOrderError);
+    expect(() => parsePendingCheckoutLineSnapshots([{ ...snapshot, productName: "" }])).toThrow(
       PaidOrderError,
     );
+    expect(() =>
+      assertPendingCheckoutItemsMatchSnapshots([{ variantId, quantity: 2 }], [snapshot]),
+    ).toThrow("cart items do not match");
+    expect(() =>
+      assertPendingCheckoutItemsMatchSnapshots([{ variantId, quantity: 1 }], [snapshot]),
+    ).not.toThrow();
+    expect(() =>
+      resolveOrderItemSnapshots([snapshot], { subtotalCents: 8900, currency: "usd" }),
+    ).toThrow("currency does not match");
+    expect(() =>
+      resolveOrderItemSnapshots([snapshot], { subtotalCents: 9900, currency: "cad" }),
+    ).toThrow("subtotal does not match");
+  });
+
+  test("fails conditional inventory misses", () => {
     expect(() => assertInventoryDecremented([], { variantId, quantity: 2 })).toThrow(
       InventoryUnavailableError,
     );
