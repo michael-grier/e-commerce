@@ -5,6 +5,7 @@ import { sendOrderConfirmation } from "@/lib/email/send-order-confirmation";
 import { requireEnv } from "@/lib/env";
 import { captureServerException } from "@/lib/observability/server";
 import { paidOrderRepository } from "@/lib/orders/paid-order-repository";
+import { paymentLifecycleRepository } from "@/lib/orders/payment-lifecycle-repository";
 import { getStripe } from "@/lib/stripe";
 import { constructVerifiedStripeEvent, processStripeEvent } from "@/lib/webhooks/stripe";
 
@@ -29,7 +30,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const result = await processStripeEvent(event, paidOrderRepository);
+    const result = await processStripeEvent(event, paidOrderRepository, paymentLifecycleRepository);
 
     await sendConfirmationAfterOrderCommit(result, sendOrderConfirmation, (error) => {
       captureServerException(error, {

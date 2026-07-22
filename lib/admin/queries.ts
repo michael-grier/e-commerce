@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getDb } from "@/lib/db/client";
@@ -18,7 +18,14 @@ export async function getAdminDashboardSummary() {
       db
         .select({ count: count() })
         .from(orders)
-        .where(and(eq(orders.status, "paid"), eq(orders.inventoryStatus, "allocated"))),
+        .where(
+          and(
+            eq(orders.status, "paid"),
+            eq(orders.inventoryStatus, "allocated"),
+            ne(orders.refundStatus, "full"),
+            inArray(orders.disputeStatus, ["none", "won"]),
+          ),
+        ),
       db
         .select({ count: count() })
         .from(orders)
@@ -90,6 +97,9 @@ export async function getAdminOrders() {
       email: true,
       status: true,
       inventoryStatus: true,
+      refundStatus: true,
+      refundedCents: true,
+      disputeStatus: true,
       totalCents: true,
       currency: true,
       createdAt: true,

@@ -33,6 +33,34 @@ const orderInventoryStatusLabels: Record<Order["inventoryStatus"], string> = {
   exception: "Inventory exception",
 };
 
+const refundStatusStyles: Record<Order["refundStatus"], string> = {
+  none: "border-border bg-background text-muted-foreground",
+  partial: "border-orange-200 bg-orange-50 text-orange-900",
+  full: "border-border bg-muted text-muted-foreground",
+};
+
+const refundStatusLabels: Record<Order["refundStatus"], string> = {
+  none: "Not refunded",
+  partial: "Partially refunded",
+  full: "Fully refunded",
+};
+
+const disputeStatusStyles: Record<Order["disputeStatus"], string> = {
+  none: "border-border bg-background text-muted-foreground",
+  open: "border-red-200 bg-red-50 text-red-800",
+  won: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  lost: "border-red-200 bg-red-50 text-red-800",
+  prevented: "border-red-200 bg-red-50 text-red-800",
+};
+
+const disputeStatusLabels: Record<Order["disputeStatus"], string> = {
+  none: "No dispute",
+  open: "Dispute open",
+  won: "Dispute won",
+  lost: "Dispute lost",
+  prevented: "Dispute prevented",
+};
+
 function formatStatus(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -57,6 +85,22 @@ export function OrderInventoryStatusBadge({ status }: { status: Order["inventory
   return (
     <Badge className={orderInventoryStatusStyles[status]} variant="outline">
       {orderInventoryStatusLabels[status]}
+    </Badge>
+  );
+}
+
+export function RefundStatusBadge({ status }: { status: Order["refundStatus"] }) {
+  return (
+    <Badge className={refundStatusStyles[status]} variant="outline">
+      {refundStatusLabels[status]}
+    </Badge>
+  );
+}
+
+export function DisputeStatusBadge({ status }: { status: Order["disputeStatus"] }) {
+  return (
+    <Badge className={disputeStatusStyles[status]} variant="outline">
+      {disputeStatusLabels[status]}
     </Badge>
   );
 }

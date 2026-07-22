@@ -15,10 +15,19 @@ import {
 export const productStatusValues = ["draft", "active", "archived"] as const;
 export const orderStatusValues = ["pending", "paid", "fulfilled", "cancelled", "refunded"] as const;
 export const orderInventoryStatusValues = ["allocated", "exception"] as const;
+export const refundStatusValues = ["none", "partial", "full"] as const;
+export const disputeStatusValues = ["none", "open", "won", "lost", "prevented"] as const;
+export const stripePaymentEventKindValues = ["refund", "dispute"] as const;
 
 export const productStatus = pgEnum("product_status", productStatusValues);
 export const orderStatus = pgEnum("order_status", orderStatusValues);
 export const orderInventoryStatus = pgEnum("order_inventory_status", orderInventoryStatusValues);
+export const refundStatus = pgEnum("refund_status", refundStatusValues);
+export const disputeStatus = pgEnum("dispute_status", disputeStatusValues);
+export const stripePaymentEventKind = pgEnum(
+  "stripe_payment_event_kind",
+  stripePaymentEventKindValues,
+);
 
 export type PendingCheckoutItem = {
   variantId: string;
@@ -130,6 +139,9 @@ export const orders = pgTable(
     inventoryStatus: orderInventoryStatus("inventory_status").notNull().default("allocated"),
     stripeSessionId: text("stripe_session_id").notNull(),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
+    refundStatus: refundStatus("refund_status").notNull().default("none"),
+    refundedCents: integer("refunded_cents").notNull().default(0),
+    disputeStatus: disputeStatus("dispute_status").notNull().default("none"),
     subtotalCents: integer("subtotal_cents").notNull(),
     taxCents: integer("tax_cents").notNull().default(0),
     shippingCents: integer("shipping_cents").notNull().default(0),
@@ -141,15 +153,43 @@ export const orders = pgTable(
   (table) => [
     uniqueIndex("orders_order_number_unique").on(table.orderNumber),
     uniqueIndex("orders_stripe_session_id_unique").on(table.stripeSessionId),
+    uniqueIndex("orders_stripe_payment_intent_id_unique").on(table.stripePaymentIntentId),
     index("orders_status_idx").on(table.status),
     index("orders_created_at_idx").on(table.createdAt),
     check("orders_subtotal_cents_nonnegative", sql`${table.subtotalCents} >= 0`),
     check("orders_tax_cents_nonnegative", sql`${table.taxCents} >= 0`),
     check("orders_shipping_cents_nonnegative", sql`${table.shippingCents} >= 0`),
     check("orders_total_cents_nonnegative", sql`${table.totalCents} >= 0`),
+    check("orders_refunded_cents_nonnegative", sql`${table.refundedCents} >= 0`),
+    check(
+      "orders_refunded_cents_not_above_total",
+      sql`${table.refundedCents} <= ${table.totalCents}`,
+    ),
     check(
       "orders_fulfilled_inventory_allocated",
       sql`${table.status} <> 'fulfilled' OR ${table.inventoryStatus} = 'allocated'`,
+    ),
+  ],
+);
+
+export const stripePaymentEvents = pgTable(
+  "stripe_payment_events",
+  {
+    stripeEventId: text("stripe_event_id").primaryKey(),
+    stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+    kind: stripePaymentEventKind("kind").notNull(),
+    refundedCents: integer("refunded_cents"),
+    currency: text("currency"),
+    disputeStatus: disputeStatus("dispute_status"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("stripe_payment_events_payment_intent_idx").on(table.stripePaymentIntentId),
+    index("stripe_payment_events_occurred_at_idx").on(table.occurredAt),
+    check(
+      "stripe_payment_events_refunded_cents_nonnegative",
+      sql`${table.refundedCents} IS NULL OR ${table.refundedCents} >= 0`,
     ),
   ],
 );
@@ -225,3 +265,5 @@ export type Order = typeof orders.$inferSelect;
 export type NewOrder = typeof orders.$inferInsert;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type NewOrderItem = typeof orderItems.$inferInsert;
+export type StripePaymentEvent = typeof stripePaymentEvents.$inferSelect;
+export type NewStripePaymentEvent = typeof stripePaymentEvents.$inferInsert;

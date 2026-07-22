@@ -13,8 +13,14 @@ import {
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import {
+  derivePaymentLifecycleState,
+  type PaymentLifecycleUpdate,
+  type PaymentLifecycleWriter,
+} from "@/lib/orders/payment-lifecycle";
+import {
   constructVerifiedStripeEvent,
   parsePaidCheckoutData,
+  parsePaymentLifecycleUpdate,
   processStripeEvent,
   StripeWebhookSignatureError,
 } from "@/lib/webhooks/stripe";
@@ -58,6 +64,70 @@ function makeCheckoutSession(overrides: Record<string, unknown> = {}): Record<st
     ...overrides,
   };
 }
+
+function makeRefundEvent(
+  refundedCents: number,
+  stripeEventId = "evt_refund_1",
+  created = 1_784_700_000,
+) {
+  return {
+    id: stripeEventId,
+    created,
+    type: "charge.refunded",
+    data: {
+      object: {
+        id: "ch_test_paid",
+        payment_intent: "pi_test_paid",
+        amount_refunded: refundedCents,
+        currency: "CAD",
+      },
+    },
+  };
+}
+
+function makeDisputeEvent(
+  status: "needs_response" | "under_review" | "won" | "lost" | "prevented",
+  stripeEventId: string,
+  created: number,
+  type = "charge.dispute.updated",
+) {
+  return {
+    id: stripeEventId,
+    created,
+    type,
+    data: {
+      object: {
+        id: "dp_test_paid",
+        payment_intent: "pi_test_paid",
+        status,
+      },
+    },
+  };
+}
+
+function makeMemoryPaymentWriter() {
+  const events = new Map<string, PaymentLifecycleUpdate>();
+  let state = derivePaymentLifecycleState(10400, "cad", []);
+
+  const writer: PaymentLifecycleWriter = {
+    async recordPaymentLifecycleUpdate(update) {
+      const changed = !events.has(update.stripeEventId);
+      events.set(update.stripeEventId, update);
+      state = derivePaymentLifecycleState(10400, "cad", [...events.values()]);
+      return { changed, orderId: "order_123" };
+    },
+  };
+
+  return {
+    events,
+    getState: () => state,
+    writer,
+  };
+}
+
+const unusedPaidOrderWriter = {
+  createPaidOrder: async () => ({ created: true, orderId: "order_unused" }),
+};
 
 describe("Stripe webhook signatures", () => {
   test("passes the unchanged raw body to Stripe verification", () => {
@@ -146,6 +216,39 @@ describe("paid Checkout Session parsing", () => {
   });
 });
 
+describe("Stripe payment lifecycle parsing", () => {
+  test("maps Stripe-authoritative aggregate refund amounts", () => {
+    expect(parsePaymentLifecycleUpdate(makeRefundEvent(3200))).toEqual({
+      stripeEventId: "evt_refund_1",
+      stripePaymentIntentId: "pi_test_paid",
+      kind: "refund",
+      refundedCents: 3200,
+      currency: "cad",
+      disputeStatus: null,
+      occurredAt: new Date(1_784_700_000 * 1000),
+    });
+  });
+
+  test("normalizes active, won, lost, and prevented disputes", () => {
+    expect(
+      parsePaymentLifecycleUpdate(
+        makeDisputeEvent("needs_response", "evt_dispute_open", 1_784_700_010),
+      ),
+    ).toMatchObject({ kind: "dispute", disputeStatus: "open" });
+    expect(
+      parsePaymentLifecycleUpdate(makeDisputeEvent("won", "evt_dispute_won", 1_784_700_020)),
+    ).toMatchObject({ kind: "dispute", disputeStatus: "won" });
+    expect(
+      parsePaymentLifecycleUpdate(makeDisputeEvent("lost", "evt_dispute_lost", 1_784_700_020)),
+    ).toMatchObject({ kind: "dispute", disputeStatus: "lost" });
+    expect(
+      parsePaymentLifecycleUpdate(
+        makeDisputeEvent("prevented", "evt_dispute_prevented", 1_784_700_020),
+      ),
+    ).toMatchObject({ kind: "dispute", disputeStatus: "prevented" });
+  });
+});
+
 describe("Stripe event processing", () => {
   test("ignores unrelated and unpaid events without touching persistence", async () => {
     let writes = 0;
@@ -219,7 +322,106 @@ describe("Stripe event processing", () => {
       ),
     ).toEqual({ handled: true, created: true, orderId: "order_async" });
   });
+
+  test("records partial and full refunds without reopening a fully refunded payment", async () => {
+    const payment = makeMemoryPaymentWriter();
+
+    await processStripeEvent(
+      makeRefundEvent(3200, "evt_refund_partial"),
+      unusedPaidOrderWriter,
+      payment.writer,
+    );
+    expect(payment.getState()).toEqual({
+      refundStatus: "partial",
+      refundedCents: 3200,
+      disputeStatus: "none",
+    });
+
+    await processStripeEvent(
+      makeRefundEvent(10400, "evt_refund_full"),
+      unusedPaidOrderWriter,
+      payment.writer,
+    );
+    expect(payment.getState()).toEqual({
+      refundStatus: "full",
+      refundedCents: 10400,
+      disputeStatus: "none",
+    });
+
+    await processStripeEvent(
+      makeRefundEvent(3200, "evt_refund_older", 1_784_699_000),
+      unusedPaidOrderWriter,
+      payment.writer,
+    );
+    expect(payment.getState().refundStatus).toBe("full");
+    expect(payment.getState().refundedCents).toBe(10400);
+  });
+
+  test("deduplicates replayed Stripe event ids", async () => {
+    const payment = makeMemoryPaymentWriter();
+    const event = makeRefundEvent(3200);
+
+    expect(await processStripeEvent(event, unusedPaidOrderWriter, payment.writer)).toEqual({
+      handled: true,
+      paymentUpdated: true,
+      changed: true,
+      orderId: "order_123",
+    });
+    expect(await processStripeEvent(event, unusedPaidOrderWriter, payment.writer)).toEqual({
+      handled: true,
+      paymentUpdated: true,
+      changed: false,
+      orderId: "order_123",
+    });
+    expect(payment.events.size).toBe(1);
+  });
+
+  test("uses Stripe event time instead of delivery order for dispute state", async () => {
+    const payment = makeMemoryPaymentWriter();
+
+    await processStripeEvent(
+      makeDisputeEvent("won", "evt_dispute_closed", 1_784_700_020, "charge.dispute.closed"),
+      unusedPaidOrderWriter,
+      payment.writer,
+    );
+    await processStripeEvent(
+      makeDisputeEvent(
+        "needs_response",
+        "evt_dispute_created",
+        1_784_700_010,
+        "charge.dispute.created",
+      ),
+      unusedPaidOrderWriter,
+      payment.writer,
+    );
+
+    expect(payment.getState().disputeStatus).toBe("won");
+  });
+
+  test("reconciles lifecycle events retained before paid order creation", () => {
+    const refund = parsePaymentLifecycleUpdate(makeRefundEvent(10400, "evt_refund_before_order"));
+    const dispute = parsePaymentLifecycleUpdate(
+      makeDisputeEvent(
+        "needs_response",
+        "evt_dispute_before_order",
+        1_784_700_010,
+        "charge.dispute.created",
+      ),
+    );
+
+    expect(
+      derivePaymentLifecycleState(10400, "cad", [refund, dispute].filter(isPaymentUpdate)),
+    ).toEqual({
+      refundStatus: "full",
+      refundedCents: 10400,
+      disputeStatus: "open",
+    });
+  });
 });
+
+function isPaymentUpdate(update: PaymentLifecycleUpdate | null): update is PaymentLifecycleUpdate {
+  return update !== null;
+}
 
 describe("paid order snapshots and inventory", () => {
   test("keeps Checkout snapshots immutable when catalog values change before payment", () => {

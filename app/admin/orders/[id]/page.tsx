@@ -4,11 +4,17 @@ import { notFound } from "next/navigation";
 
 import { MarkOrderShippedButton } from "@/components/admin/mark-order-shipped-button";
 import { ResolveInventoryExceptionButton } from "@/components/admin/resolve-inventory-exception-button";
-import { OrderInventoryStatusBadge, OrderStatusBadge } from "@/components/admin/status-badge";
+import {
+  DisputeStatusBadge,
+  OrderInventoryStatusBadge,
+  OrderStatusBadge,
+  RefundStatusBadge,
+} from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAdminDate } from "@/lib/admin/format";
 import { getAdminOrderById } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/money";
+import { isOrderFulfillmentEligible } from "@/lib/orders/payment-lifecycle";
 import { getShippingAddressLines } from "@/lib/orders/shipping-address";
 
 type AdminOrderPageProps = {
@@ -40,6 +46,12 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
             <h1 className="font-black text-4xl tracking-normal">{order.orderNumber}</h1>
             <OrderStatusBadge status={order.status} />
             <OrderInventoryStatusBadge status={order.inventoryStatus} />
+            {order.refundStatus !== "none" ? (
+              <RefundStatusBadge status={order.refundStatus} />
+            ) : null}
+            {order.disputeStatus !== "none" ? (
+              <DisputeStatusBadge status={order.disputeStatus} />
+            ) : null}
           </div>
           <p className="text-muted-foreground">
             Created{" "}
@@ -48,7 +60,7 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
         </div>
         <div className="space-y-4 sm:text-right">
           <p className="font-black text-3xl">{formatMoney(order.totalCents, order.currency)}</p>
-          {order.status === "paid" && order.inventoryStatus === "allocated" ? (
+          {order.inventoryStatus === "allocated" && isOrderFulfillmentEligible(order) ? (
             <MarkOrderShippedButton orderId={order.id} />
           ) : null}
         </div>
@@ -67,7 +79,9 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
             by restocking the affected variants and retrying allocation, or refund it in Stripe. The
             order cannot be marked as shipped while this exception remains.
           </p>
-          {order.status === "paid" ? <ResolveInventoryExceptionButton orderId={order.id} /> : null}
+          {isOrderFulfillmentEligible(order) ? (
+            <ResolveInventoryExceptionButton orderId={order.id} />
+          ) : null}
         </section>
       ) : null}
 
@@ -161,6 +175,17 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
             <div className="flex items-center justify-between border-t pt-3 font-bold text-base">
               <dt>Total</dt>
               <dd>{formatMoney(order.totalCents, order.currency)}</dd>
+            </div>
+            <TotalRow label="Refunded" value={formatMoney(order.refundedCents, order.currency)} />
+            <TotalRow
+              label="Net paid"
+              value={formatMoney(order.totalCents - order.refundedCents, order.currency)}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <dt className="text-muted-foreground">Dispute</dt>
+              <dd>
+                <DisputeStatusBadge status={order.disputeStatus} />
+              </dd>
             </div>
           </dl>
         </section>

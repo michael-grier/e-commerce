@@ -37,7 +37,7 @@ export async function resolveInventoryException(
       );
     case "invalid_status":
       throw new InventoryExceptionResolutionError(
-        "Only paid orders with an inventory exception can retry allocation.",
+        "Only payment-eligible paid orders with an inventory exception can retry allocation.",
         result,
       );
     case "not_found":

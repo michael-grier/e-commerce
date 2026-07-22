@@ -6,6 +6,11 @@ import type {
   PaidCheckoutData,
   PaidOrderWriter,
 } from "@/lib/orders/create-paid-order";
+import type {
+  PaymentLifecycleUpdate,
+  PaymentLifecycleWriter,
+  RecordPaymentLifecycleResult,
+} from "@/lib/orders/payment-lifecycle";
 import { pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
 
 const stripeAddressSchema = z
@@ -68,14 +73,58 @@ const paidCheckoutSessionSchema = z
   })
   .passthrough();
 
+const stripeReferenceSchema = z.union([
+  z.string().min(1),
+  z.object({ id: z.string().min(1) }).passthrough(),
+]);
+
+const refundedChargeSchema = z
+  .object({
+    payment_intent: stripeReferenceSchema,
+    amount_refunded: z.number().int().nonnegative(),
+    currency: z
+      .string()
+      .length(3)
+      .transform((currency) => currency.toLowerCase()),
+  })
+  .passthrough();
+
+const stripeDisputeStatusSchema = z.enum([
+  "warning_needs_response",
+  "warning_under_review",
+  "warning_closed",
+  "needs_response",
+  "under_review",
+  "won",
+  "lost",
+  "prevented",
+]);
+
+const chargeDisputeSchema = z
+  .object({
+    payment_intent: stripeReferenceSchema,
+    status: stripeDisputeStatusSchema,
+  })
+  .passthrough();
+
+const paymentLifecycleEventSchema = z.object({
+  id: z.string().min(1),
+  created: z.number().int().nonnegative(),
+});
+
 type StripeEventLike = {
+  id?: unknown;
+  created?: unknown;
   type: string;
   data: {
     object: unknown;
   };
 };
 
-export type StripeWebhookResult = { handled: false } | ({ handled: true } & CreatePaidOrderResult);
+export type StripeWebhookResult =
+  | { handled: false }
+  | ({ handled: true } & CreatePaidOrderResult)
+  | ({ handled: true; paymentUpdated: true } & RecordPaymentLifecycleResult);
 
 export class StripeWebhookSignatureError extends Error {
   constructor() {
@@ -113,6 +162,10 @@ function getPaymentIntentId(
   return typeof paymentIntent === "string" ? paymentIntent : paymentIntent.id;
 }
 
+function getStripeReferenceId(reference: z.infer<typeof stripeReferenceSchema>): string {
+  return typeof reference === "string" ? reference : reference.id;
+}
+
 export function parsePaidCheckoutData(input: unknown): PaidCheckoutData | null {
   const session = paidCheckoutSessionSchema.parse(input);
 
@@ -137,25 +190,102 @@ export function parsePaidCheckoutData(input: unknown): PaidCheckoutData | null {
   };
 }
 
+export function parsePaymentLifecycleUpdate(event: StripeEventLike): PaymentLifecycleUpdate | null {
+  const isDisputeEvent =
+    event.type === "charge.dispute.created" ||
+    event.type === "charge.dispute.updated" ||
+    event.type === "charge.dispute.closed" ||
+    event.type === "charge.dispute.funds_withdrawn" ||
+    event.type === "charge.dispute.funds_reinstated";
+
+  if (event.type !== "charge.refunded" && !isDisputeEvent) {
+    return null;
+  }
+
+  const eventMetadata = paymentLifecycleEventSchema.parse(event);
+  const occurredAt = new Date(eventMetadata.created * 1000);
+
+  if (event.type === "charge.refunded") {
+    const charge = refundedChargeSchema.parse(event.data.object);
+
+    return {
+      stripeEventId: eventMetadata.id,
+      stripePaymentIntentId: getStripeReferenceId(charge.payment_intent),
+      kind: "refund",
+      refundedCents: charge.amount_refunded,
+      currency: charge.currency,
+      disputeStatus: null,
+      occurredAt,
+    };
+  }
+
+  if (isDisputeEvent) {
+    const dispute = chargeDisputeSchema.parse(event.data.object);
+
+    return {
+      stripeEventId: eventMetadata.id,
+      stripePaymentIntentId: getStripeReferenceId(dispute.payment_intent),
+      kind: "dispute",
+      refundedCents: null,
+      currency: null,
+      disputeStatus: normalizeDisputeStatus(dispute.status),
+      occurredAt,
+    };
+  }
+
+  return null;
+}
+
 export async function processStripeEvent(
   event: StripeEventLike,
   writer: PaidOrderWriter,
+  paymentLifecycleWriter?: PaymentLifecycleWriter,
 ): Promise<StripeWebhookResult> {
   if (
-    event.type !== "checkout.session.completed" &&
-    event.type !== "checkout.session.async_payment_succeeded"
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded"
   ) {
+    const checkout = parsePaidCheckoutData(event.data.object);
+
+    if (!checkout) {
+      return { handled: false };
+    }
+
+    return {
+      handled: true,
+      ...(await writer.createPaidOrder(checkout)),
+    };
+  }
+
+  const paymentUpdate = parsePaymentLifecycleUpdate(event);
+
+  if (!paymentUpdate) {
     return { handled: false };
   }
 
-  const checkout = parsePaidCheckoutData(event.data.object);
-
-  if (!checkout) {
-    return { handled: false };
+  if (!paymentLifecycleWriter) {
+    throw new Error("Payment lifecycle persistence is not configured.");
   }
 
   return {
     handled: true,
-    ...(await writer.createPaidOrder(checkout)),
+    paymentUpdated: true,
+    ...(await paymentLifecycleWriter.recordPaymentLifecycleUpdate(paymentUpdate)),
   };
+}
+
+function normalizeDisputeStatus(
+  status: z.infer<typeof stripeDisputeStatusSchema>,
+): NonNullable<PaymentLifecycleUpdate["disputeStatus"]> {
+  switch (status) {
+    case "won":
+    case "warning_closed":
+      return "won";
+    case "lost":
+      return "lost";
+    case "prevented":
+      return "prevented";
+    default:
+      return "open";
+  }
 }

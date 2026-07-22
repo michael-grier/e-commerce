@@ -1,6 +1,10 @@
 import type { Order } from "@/lib/db/schema";
+import { isOrderFulfillmentEligible } from "@/lib/orders/payment-lifecycle";
 
-export type OrderFulfillmentState = Pick<Order, "status" | "inventoryStatus">;
+export type OrderFulfillmentState = Pick<
+  Order,
+  "status" | "inventoryStatus" | "refundStatus" | "disputeStatus"
+>;
 
 export type OrderFulfillmentRepository = {
   markPaidOrderFulfilled: (orderId: string) => Promise<boolean>;
@@ -37,6 +41,13 @@ export async function markOrderShipped(
     throw new OrderFulfillmentError("Order not found.", "not_found");
   }
 
+  if (!isOrderFulfillmentEligible(state)) {
+    throw new OrderFulfillmentError(
+      "Only payment-eligible paid orders can be marked as shipped.",
+      "invalid_status",
+    );
+  }
+
   if (state.inventoryStatus === "exception") {
     throw new OrderFulfillmentError(
       "Resolve the inventory exception before marking this order as shipped.",
@@ -44,5 +55,8 @@ export async function markOrderShipped(
     );
   }
 
-  throw new OrderFulfillmentError("Only paid orders can be marked as shipped.", "invalid_status");
+  throw new OrderFulfillmentError(
+    "Only payment-eligible paid orders can be marked as shipped.",
+    "invalid_status",
+  );
 }
