@@ -1,28 +1,137 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
-import { orders } from "@/lib/db/schema";
+import { orderItems, orders, productVariants } from "@/lib/db/schema";
+import {
+  assertInventoryDecremented,
+  planInventoryAllocation,
+} from "@/lib/orders/create-paid-order";
 import type { OrderFulfillmentRepository } from "@/lib/orders/mark-order-shipped";
+import type { InventoryExceptionRepository } from "@/lib/orders/resolve-inventory-exception";
 
-export const adminOrderRepository: OrderFulfillmentRepository = {
+export const adminOrderRepository: OrderFulfillmentRepository & InventoryExceptionRepository = {
   async markPaidOrderFulfilled(orderId) {
     const updatedOrders = await getDb()
       .update(orders)
       .set({ status: "fulfilled" })
-      .where(and(eq(orders.id, orderId), eq(orders.status, "paid")))
+      .where(
+        and(
+          eq(orders.id, orderId),
+          eq(orders.status, "paid"),
+          eq(orders.inventoryStatus, "allocated"),
+        ),
+      )
       .returning({ id: orders.id });
 
     return updatedOrders.length === 1;
   },
 
-  async findOrderStatus(orderId) {
+  async findOrderFulfillmentState(orderId) {
     const order = await getDb().query.orders.findFirst({
-      columns: { status: true },
+      columns: { status: true, inventoryStatus: true },
       where: (orders, { eq }) => eq(orders.id, orderId),
     });
 
-    return order?.status ?? null;
+    return order ?? null;
+  },
+
+  async allocateInventoryForException(orderId) {
+    return getDb().transaction(async (tx) => {
+      const [order] = await tx
+        .select({
+          id: orders.id,
+          status: orders.status,
+          inventoryStatus: orders.inventoryStatus,
+        })
+        .from(orders)
+        .where(eq(orders.id, orderId))
+        .for("update");
+
+      if (!order) {
+        return "not_found";
+      }
+
+      if (order.status !== "paid") {
+        return "invalid_status";
+      }
+
+      if (order.inventoryStatus === "allocated") {
+        return "already_allocated";
+      }
+
+      const items = await tx
+        .select({
+          variantId: orderItems.variantId,
+          quantity: orderItems.quantity,
+        })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, order.id));
+      const allocationLines = items.flatMap((item) =>
+        item.variantId ? [{ variantId: item.variantId, quantity: item.quantity }] : [],
+      );
+      const variantIds = Array.from(new Set(allocationLines.map((item) => item.variantId)));
+
+      if (items.length === 0 || allocationLines.length !== items.length) {
+        return "insufficient_inventory";
+      }
+
+      const variants =
+        variantIds.length > 0
+          ? await tx
+              .select({
+                id: productVariants.id,
+                inventoryQty: productVariants.inventoryQty,
+              })
+              .from(productVariants)
+              .where(inArray(productVariants.id, variantIds))
+              .orderBy(asc(productVariants.id))
+              .for("update")
+          : [];
+      const allocation = planInventoryAllocation(allocationLines, variants);
+
+      if (allocation.status === "exception") {
+        return "insufficient_inventory";
+      }
+
+      for (const line of allocation.lines) {
+        const updatedVariants = await tx
+          .update(productVariants)
+          .set({
+            inventoryQty: sql`${productVariants.inventoryQty} - ${line.quantity}`,
+          })
+          .where(
+            and(
+              eq(productVariants.id, line.variantId),
+              gte(productVariants.inventoryQty, line.quantity),
+            ),
+          )
+          .returning({ id: productVariants.id });
+
+        assertInventoryDecremented(
+          updatedVariants.map((variant) => variant.id),
+          line,
+        );
+      }
+
+      const allocatedOrders = await tx
+        .update(orders)
+        .set({ inventoryStatus: "allocated" })
+        .where(
+          and(
+            eq(orders.id, order.id),
+            eq(orders.status, "paid"),
+            eq(orders.inventoryStatus, "exception"),
+          ),
+        )
+        .returning({ id: orders.id });
+
+      if (allocatedOrders.length !== 1) {
+        throw new Error("Inventory exception order could not be marked allocated.");
+      }
+
+      return "allocated";
+    });
   },
 };

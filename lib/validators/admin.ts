@@ -7,3 +7,5 @@ export const markOrderShippedSchema = z
     orderId: adminEntityIdSchema,
   })
   .strict();
+
+export const retryOrderInventoryAllocationSchema = markOrderShippedSchema;

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { MarkOrderShippedButton } from "@/components/admin/mark-order-shipped-button";
-import { OrderStatusBadge } from "@/components/admin/status-badge";
+import { ResolveInventoryExceptionButton } from "@/components/admin/resolve-inventory-exception-button";
+import { OrderInventoryStatusBadge, OrderStatusBadge } from "@/components/admin/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatAdminDate } from "@/lib/admin/format";
 import { getAdminOrderById } from "@/lib/admin/queries";
@@ -38,6 +39,7 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="font-black text-4xl tracking-normal">{order.orderNumber}</h1>
             <OrderStatusBadge status={order.status} />
+            <OrderInventoryStatusBadge status={order.inventoryStatus} />
           </div>
           <p className="text-muted-foreground">
             Created{" "}
@@ -46,9 +48,28 @@ export default async function AdminOrderPage({ params }: AdminOrderPageProps) {
         </div>
         <div className="space-y-4 sm:text-right">
           <p className="font-black text-3xl">{formatMoney(order.totalCents, order.currency)}</p>
-          {order.status === "paid" ? <MarkOrderShippedButton orderId={order.id} /> : null}
+          {order.status === "paid" && order.inventoryStatus === "allocated" ? (
+            <MarkOrderShippedButton orderId={order.id} />
+          ) : null}
         </div>
       </div>
+
+      {order.inventoryStatus === "exception" ? (
+        <section
+          aria-labelledby="inventory-exception-heading"
+          className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-950"
+        >
+          <h2 className="font-bold text-xl" id="inventory-exception-heading">
+            Inventory exception — do not fulfill
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm">
+            Stripe payment is recorded, but stock could not be allocated. Reconcile this paid order
+            by restocking the affected variants and retrying allocation, or refund it in Stripe. The
+            order cannot be marked as shipped while this exception remains.
+          </p>
+          {order.status === "paid" ? <ResolveInventoryExceptionButton orderId={order.id} /> : null}
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section aria-labelledby="customer-heading" className="rounded-lg border bg-background p-6">

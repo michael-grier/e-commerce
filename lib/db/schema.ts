@@ -14,9 +14,11 @@ import {
 
 export const productStatusValues = ["draft", "active", "archived"] as const;
 export const orderStatusValues = ["pending", "paid", "fulfilled", "cancelled", "refunded"] as const;
+export const orderInventoryStatusValues = ["allocated", "exception"] as const;
 
 export const productStatus = pgEnum("product_status", productStatusValues);
 export const orderStatus = pgEnum("order_status", orderStatusValues);
+export const orderInventoryStatus = pgEnum("order_inventory_status", orderInventoryStatusValues);
 
 export type PendingCheckoutItem = {
   variantId: string;
@@ -125,6 +127,7 @@ export const orders = pgTable(
     orderNumber: text("order_number").notNull(),
     email: text("email").notNull(),
     status: orderStatus("status").notNull().default("pending"),
+    inventoryStatus: orderInventoryStatus("inventory_status").notNull().default("allocated"),
     stripeSessionId: text("stripe_session_id").notNull(),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     subtotalCents: integer("subtotal_cents").notNull(),
@@ -144,6 +147,10 @@ export const orders = pgTable(
     check("orders_tax_cents_nonnegative", sql`${table.taxCents} >= 0`),
     check("orders_shipping_cents_nonnegative", sql`${table.shippingCents} >= 0`),
     check("orders_total_cents_nonnegative", sql`${table.totalCents} >= 0`),
+    check(
+      "orders_fulfilled_inventory_allocated",
+      sql`${table.status} <> 'fulfilled' OR ${table.inventoryStatus} = 'allocated'`,
+    ),
   ],
 );
 

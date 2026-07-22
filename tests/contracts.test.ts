@@ -5,6 +5,7 @@ import { parseEnv } from "@/lib/env";
 import { centsToDollars, dollarsToCents } from "@/lib/money";
 import { makeOrderNumber } from "@/lib/orders/order-number";
 import { checkoutSchema, pendingCheckoutMetadataSchema } from "@/lib/validators/cart";
+import { orderInventoryStatusSchema } from "@/lib/validators/order";
 import {
   pendingCheckoutInsertSchema,
   pendingCheckoutLineSnapshotsSchema,
@@ -154,5 +155,13 @@ describe("order numbers", () => {
     const orderNumber = makeOrderNumber(new Date("2026-07-09T12:00:00.000Z"), "a1b2c3d4");
 
     expect(orderNumber).toBe("SK8-20260709-A1B2C3D4");
+  });
+});
+
+describe("order inventory contract", () => {
+  test("accepts only explicit persisted allocation states", () => {
+    expect(orderInventoryStatusSchema.parse("allocated")).toBe("allocated");
+    expect(orderInventoryStatusSchema.parse("exception")).toBe("exception");
+    expect(() => orderInventoryStatusSchema.parse("available")).toThrow();
   });
 });

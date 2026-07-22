@@ -9,6 +9,7 @@ import {
   type PaidCheckoutData,
   PaidOrderError,
   parsePendingCheckoutLineSnapshots,
+  planInventoryAllocation,
   resolveOrderItemSnapshots,
 } from "@/lib/orders/create-paid-order";
 import {
@@ -299,5 +300,44 @@ describe("paid order snapshots and inventory", () => {
         quantity: 2,
       }),
     ).toThrow(InventoryUnavailableError);
+  });
+
+  test("plans an all-or-nothing inventory exception when paid checkouts compete", () => {
+    const paidItems = [{ variantId, quantity: 1 }];
+    const firstPaidCheckout = planInventoryAllocation(paidItems, [
+      { id: variantId, inventoryQty: 1 },
+    ]);
+    const competingPaidCheckout = planInventoryAllocation(paidItems, [
+      { id: variantId, inventoryQty: 0 },
+    ]);
+
+    expect(firstPaidCheckout).toEqual({
+      status: "allocated",
+      lines: paidItems,
+    });
+    expect(competingPaidCheckout).toEqual({
+      status: "exception",
+      lines: [],
+    });
+    expect(planInventoryAllocation(paidItems, [{ id: variantId, inventoryQty: 0 }])).toEqual(
+      competingPaidCheckout,
+    );
+  });
+
+  test("does not partially allocate a multi-line paid order", () => {
+    const secondVariantId = "879dd483-16c9-4d6c-885f-b00525f84923";
+
+    expect(
+      planInventoryAllocation(
+        [
+          { variantId, quantity: 1 },
+          { variantId: secondVariantId, quantity: 2 },
+        ],
+        [
+          { id: variantId, inventoryQty: 1 },
+          { id: secondVariantId, inventoryQty: 1 },
+        ],
+      ),
+    ).toEqual({ status: "exception", lines: [] });
   });
 });

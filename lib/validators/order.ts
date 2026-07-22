@@ -1,9 +1,10 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 
-import { orderItems, orderStatusValues, orders } from "@/lib/db/schema";
+import { orderInventoryStatusValues, orderItems, orderStatusValues, orders } from "@/lib/db/schema";
 
 export const orderStatusSchema = z.enum(orderStatusValues);
+export const orderInventoryStatusSchema = z.enum(orderInventoryStatusValues);
 export const shippingAddressSchema = z.record(z.string(), z.unknown()).nullable();
 
 export const orderSelectSchema = createSelectSchema(orders, {

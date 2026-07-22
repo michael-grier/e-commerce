@@ -1,8 +1,10 @@
 import type { Order } from "@/lib/db/schema";
 
+export type OrderFulfillmentState = Pick<Order, "status" | "inventoryStatus">;
+
 export type OrderFulfillmentRepository = {
   markPaidOrderFulfilled: (orderId: string) => Promise<boolean>;
-  findOrderStatus: (orderId: string) => Promise<Order["status"] | null>;
+  findOrderFulfillmentState: (orderId: string) => Promise<OrderFulfillmentState | null>;
 };
 
 export class OrderFulfillmentError extends Error {
@@ -25,14 +27,21 @@ export async function markOrderShipped(
     return { changed: true };
   }
 
-  const status = await repository.findOrderStatus(orderId);
+  const state = await repository.findOrderFulfillmentState(orderId);
 
-  if (status === "fulfilled") {
+  if (state?.status === "fulfilled") {
     return { changed: false };
   }
 
-  if (!status) {
+  if (!state) {
     throw new OrderFulfillmentError("Order not found.", "not_found");
+  }
+
+  if (state.inventoryStatus === "exception") {
+    throw new OrderFulfillmentError(
+      "Resolve the inventory exception before marking this order as shipped.",
+      "invalid_status",
+    );
   }
 
   throw new OrderFulfillmentError("Only paid orders can be marked as shipped.", "invalid_status");

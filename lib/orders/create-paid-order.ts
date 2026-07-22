@@ -15,6 +15,11 @@ export type PaidCheckoutData = {
   shippingAddress: Record<string, unknown> | null;
 };
 
+export type InventorySnapshotVariant = {
+  id: string;
+  inventoryQty: number;
+};
+
 export type OrderItemSnapshot = {
   variantId: string;
   productNameSnapshot: string;
@@ -31,6 +36,16 @@ export type CreatePaidOrderResult = {
 export type PaidOrderWriter = {
   createPaidOrder: (checkout: PaidCheckoutData) => Promise<CreatePaidOrderResult>;
 };
+
+export type InventoryAllocationPlan =
+  | {
+      status: "allocated";
+      lines: Array<{ variantId: string; quantity: number }>;
+    }
+  | {
+      status: "exception";
+      lines: [];
+    };
 
 export class PaidOrderError extends Error {
   constructor(message: string) {
@@ -117,6 +132,33 @@ export function resolveOrderItemSnapshots(
     unitPriceCentsSnapshot: line.unitPriceCents,
     quantity: line.quantity,
   }));
+}
+
+export function planInventoryAllocation(
+  orderItems: Array<Pick<OrderItemSnapshot, "variantId" | "quantity">>,
+  variants: InventorySnapshotVariant[],
+): InventoryAllocationPlan {
+  const requiredByVariantId = new Map<string, number>();
+
+  for (const item of orderItems) {
+    requiredByVariantId.set(
+      item.variantId,
+      (requiredByVariantId.get(item.variantId) ?? 0) + item.quantity,
+    );
+  }
+
+  const inventoryByVariantId = new Map(
+    variants.map((variant) => [variant.id, variant.inventoryQty]),
+  );
+  const lines = Array.from(requiredByVariantId, ([variantId, quantity]) => ({
+    variantId,
+    quantity,
+  })).sort((left, right) => left.variantId.localeCompare(right.variantId));
+  const canAllocateEveryLine = lines.every(
+    (line) => (inventoryByVariantId.get(line.variantId) ?? -1) >= line.quantity,
+  );
+
+  return canAllocateEveryLine ? { status: "allocated", lines } : { status: "exception", lines: [] };
 }
 
 export function assertInventoryDecremented(
