@@ -4,11 +4,29 @@ function isAdminRoute(pathname: string): boolean {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
-export default clerkMiddleware(async (auth, request) => {
-  if (isAdminRoute(request.nextUrl.pathname)) {
-    await auth.protect();
-  }
-});
+export default clerkMiddleware(
+  async (auth, request) => {
+    if (isAdminRoute(request.nextUrl.pathname)) {
+      await auth.protect();
+    }
+  },
+  {
+    contentSecurityPolicy: {
+      directives: {
+        "base-uri": ["self"],
+        "connect-src": [
+          "https://*.ingest.sentry.io",
+          "https://*.ingest.us.sentry.io",
+          "https://*.r2.cloudflarestorage.com",
+          ...(process.env.NODE_ENV === "production" ? [] : ["ws:"]),
+        ],
+        "frame-ancestors": ["none"],
+        "img-src": ["blob:", "https:"],
+        "object-src": ["none"],
+      },
+    },
+  },
+);
 
 export const config = {
   matcher: [

@@ -3,10 +3,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { MAX_CART_LINE_QUANTITY } from "./constants";
 import { toCheckoutRequest } from "./selectors";
 import type { AddCartLineInput, CartDisplayLine, CheckoutRequest } from "./types";
-
-const MAX_LINE_QUANTITY = 99;
 
 type CartState = {
   lines: CartDisplayLine[];
@@ -18,7 +17,7 @@ type CartState = {
 };
 
 function clampQuantity(quantity: number): number {
-  return Math.min(Math.max(Math.trunc(quantity), 1), MAX_LINE_QUANTITY);
+  return Math.min(Math.max(Math.trunc(quantity), 1), MAX_CART_LINE_QUANTITY);
 }
 
 export const useCartStore = create<CartState>()(

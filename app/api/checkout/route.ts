@@ -5,24 +5,25 @@ import { toCheckoutErrorResponse } from "@/lib/checkout/error-response";
 import { checkoutRepository } from "@/lib/checkout/repository";
 import { parseAllowedShippingCountries } from "@/lib/checkout/shipping";
 import { env, requireEnv } from "@/lib/env";
+import { readJsonRequest } from "@/lib/http/read-json-request";
 import { captureServerException } from "@/lib/observability/server";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request): Promise<Response> {
-  let payload: unknown;
+const maxCheckoutRequestBytes = 16 * 1024;
 
-  try {
-    payload = await request.json();
-  } catch {
-    return Response.json({ error: "Request body must be valid JSON." }, { status: 400 });
+export async function POST(request: Request): Promise<Response> {
+  const body = await readJsonRequest(request, maxCheckoutRequestBytes);
+
+  if (!body.success) {
+    return Response.json({ error: body.error }, { status: body.status });
   }
 
   try {
     return Response.json(
       await createHostedCheckout(
-        payload,
+        body.data,
         {
           appUrl: requireEnv("NEXT_PUBLIC_APP_URL"),
           allowedCountries: parseAllowedShippingCountries(env.SHIPPING_ALLOWED_COUNTRIES),

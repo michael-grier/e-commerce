@@ -1,13 +1,34 @@
 import { z } from "zod";
 
+import { MAX_CART_LINE_QUANTITY, MAX_CART_LINES } from "@/lib/cart/constants";
+
 export const cartLineSchema = z
   .object({
     variantId: z.string().uuid(),
-    quantity: z.number().int().positive(),
+    quantity: z.number().int().positive().max(MAX_CART_LINE_QUANTITY),
   })
   .strict();
 
-export const cartSchema = z.array(cartLineSchema).min(1);
+export const cartSchema = z
+  .array(cartLineSchema)
+  .min(1)
+  .max(MAX_CART_LINES)
+  .superRefine((lines, context) => {
+    const quantities = new Map<string, number>();
+
+    for (const [index, line] of lines.entries()) {
+      const quantity = (quantities.get(line.variantId) ?? 0) + line.quantity;
+      quantities.set(line.variantId, quantity);
+
+      if (quantity > MAX_CART_LINE_QUANTITY) {
+        context.addIssue({
+          code: "custom",
+          message: `Combined quantity cannot exceed ${MAX_CART_LINE_QUANTITY}.`,
+          path: [index, "quantity"],
+        });
+      }
+    }
+  });
 
 export const checkoutSchema = z
   .object({

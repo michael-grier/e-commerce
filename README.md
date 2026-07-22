@@ -139,6 +139,27 @@ Readable production stack traces additionally require `SENTRY_ORG`, `SENTRY_PROJ
 `SENTRY_AUTH_TOKEN` in the deployment environment. Source-map generation and upload remain disabled
 when the auth token is absent. Never expose `SENTRY_AUTH_TOKEN` through a `NEXT_PUBLIC_*` variable.
 
+## Security Hardening
+
+The app sends a baseline set of browser security headers from `next.config.ts` and uses Clerk's
+middleware integration to generate a Clerk-compatible Content Security Policy. The policy blocks
+framing and object embeds while allowing the external connections required by Clerk, Sentry, and
+direct R2 uploads. Checkout and upload-URL requests must use JSON and have bounded request bodies;
+checkout submissions also cap line count and quantity before querying Postgres or calling Stripe.
+
+Production rate limiting belongs at the Vercel Firewall so abusive requests are stopped before a
+serverless function, Neon, R2, or Stripe incurs work. Follow the
+[Vercel WAF rate-limiting guide](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting)
+and, before go-live, publish fixed-window rules keyed by source IP for:
+
+- `POST /api/checkout`: 10 requests per 60 seconds.
+- `POST /api/admin/upload-url`: 30 requests per 60 seconds.
+
+Start each rule in log-only mode during final QA, confirm normal checkout and batch image uploads
+do not approach the threshold, and then switch the action to rate limit with a `429` response. Do
+not apply these rules to the Stripe webhook route; signature verification is its trust boundary,
+and Stripe must be able to retry delivery.
+
 ## Commit Checkpoints
 
 This build should be committed in small checkpoints:

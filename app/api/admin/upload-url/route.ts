@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getDb } from "@/lib/db/client";
+import { readJsonRequest } from "@/lib/http/read-json-request";
 import { captureServerException } from "@/lib/observability/server";
 import { createProductImageUploadUrl, getProductImagePublicUrl, isR2Configured } from "@/lib/r2";
 import {
@@ -11,6 +12,8 @@ import {
 
 export const runtime = "nodejs";
 
+const maxUploadRequestBytes = 4 * 1024;
+
 export async function POST(request: Request) {
   await requireAdmin();
 
@@ -18,15 +21,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "R2 image uploads are not configured." }, { status: 503 });
   }
 
-  let body: unknown;
+  const body = await readJsonRequest(request, maxUploadRequestBytes);
 
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
+  if (!body.success) {
+    return NextResponse.json({ error: body.error }, { status: body.status });
   }
 
-  const parsed = productImageUploadRequestSchema.safeParse(body);
+  const parsed = productImageUploadRequestSchema.safeParse(body.data);
 
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid image upload request." }, { status: 400 });
