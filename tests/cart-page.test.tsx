@@ -47,7 +47,8 @@ describe("cart page", () => {
     expect(markup).toContain("Clear cart");
     expect(markup).toContain("Checkout");
     expect(markup).not.toContain("Your cart is empty");
-    expect(markup).not.toContain('role="status"');
+    expect(markup).toContain("Checking stock availability.");
+    expect(markup).toContain('role="status"');
   });
 
   test("offers the delivery choice when a delivery area is configured", () => {
