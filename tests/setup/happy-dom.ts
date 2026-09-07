@@ -1,6 +1,10 @@
 import { mock } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
+import { disableTestNotifications } from "../../scripts/test-notifications";
+
+disableTestNotifications();
+
 /**
  * Web platform globals that happy-dom replaces with its own implementations, but that server-side
  * code under test relies on Bun's native versions of.

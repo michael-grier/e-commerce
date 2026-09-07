@@ -35,17 +35,25 @@ describe("server error capture contract", () => {
 describe("sentry enablement gate", () => {
   const dsn = "https://public@o0.ingest.us.sentry.io/0";
 
-  test("reports only from production builds with a DSN", () => {
-    expect(isSentryEnabled(dsn, "production")).toBe(true);
+  test("reports from production deployments with a DSN", () => {
+    expect(isSentryEnabled(dsn, "production", "production")).toBe(true);
   });
 
   test("stays off in development so local activity never reaches the production project", () => {
-    expect(isSentryEnabled(dsn, "development")).toBe(false);
-    expect(isSentryEnabled(dsn, "test")).toBe(false);
+    expect(isSentryEnabled(dsn, "development", "production")).toBe(false);
+    expect(isSentryEnabled(dsn, "test", "production")).toBe(false);
+  });
+
+  test.each([
+    undefined,
+    "development",
+    "preview",
+  ])("does not mistake a local or preview production build for a production deployment: %p", (deploymentEnv) => {
+    expect(isSentryEnabled(dsn, "production", deploymentEnv)).toBe(false);
   });
 
   test("stays off without a DSN", () => {
-    expect(isSentryEnabled(undefined, "production")).toBe(false);
-    expect(isSentryEnabled("", "production")).toBe(false);
+    expect(isSentryEnabled(undefined, "production", "production")).toBe(false);
+    expect(isSentryEnabled("", "production", "production")).toBe(false);
   });
 });

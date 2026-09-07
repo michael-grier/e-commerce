@@ -1,7 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E_BASE_URL exists so a spec run can target an already-running server elsewhere on localhost;
-// the global-setup guardrails still refuse anything that is not a loopback host.
+import {
+  disableTestNotifications,
+  testNotificationEnvironment,
+} from "./scripts/test-notifications";
+
+// Apply before global setup loads env files, and pass the same restrictions to the app.
+disableTestNotifications();
+
+// E2E_BASE_URL selects the loopback port for a server owned by this test run.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
@@ -60,8 +67,9 @@ export default defineConfig({
     // so specs are not racing on-demand dev compiles.
     command: process.env.E2E_WEB_SERVER_COMMAND ?? "bun run dev",
     url: baseURL,
-    // E2E_BASE_URL is an explicit target, so reuse that server when it is already running.
-    reuseExistingServer: true,
+    env: testNotificationEnvironment,
+    // An existing dev server may have real Resend and Sentry credentials.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

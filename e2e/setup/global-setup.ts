@@ -3,6 +3,8 @@ import { execSync } from "node:child_process";
 // CommonJS default import: @next/env exposes no named ESM exports under Node's loader.
 import nextEnv from "@next/env";
 
+import { testNotificationEnvironment } from "../../scripts/test-notifications";
+
 /**
  * Refuses to run against anything that looks like a live environment. Exported separately from
  * the Playwright hook so the guard logic itself is unit-testable (tests/e2e-guardrails.test.ts).
@@ -14,6 +16,12 @@ import nextEnv from "@next/env";
  * manual decision.
  */
 export function assertE2eGuardrails(env: NodeJS.ProcessEnv): void {
+  for (const key of Object.keys(testNotificationEnvironment)) {
+    if (env[key]) {
+      throw new Error(`E2E guardrail: ${key} must be empty to prevent test notifications.`);
+    }
+  }
+
   const stripeKey = env.STRIPE_SECRET_KEY;
   if (stripeKey && !stripeKey.startsWith("sk_test_")) {
     throw new Error(
