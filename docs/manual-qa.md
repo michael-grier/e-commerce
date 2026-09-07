@@ -47,6 +47,12 @@ against a development or disposable database branch.
 
 - [ ] The listener's signing secret matches `STRIPE_WEBHOOK_SECRET` in `.env.local`.
 - [ ] The configured Clerk user is present in `ADMIN_USER_IDS`.
+- [ ] Automated Playwright runs start their own server on an unused loopback port. Resend and
+      Sentry credentials are cleared even when configured in local env files. Test customer and
+      admin-sale emails remain queued for retry without reaching Resend; the paid-order commerce
+      spec checks both delivery records for a configuration error and no provider message ID.
+- [ ] Local production builds and preview deployments do not send errors to the production Sentry
+      project. Production deployments retain error reporting.
 - [ ] To QA local delivery, `DELIVERY_ENABLED=true` and `DELIVERY_AREA_NAME` are set; the
       fulfillment picker and delivery checkout are hidden otherwise.
 

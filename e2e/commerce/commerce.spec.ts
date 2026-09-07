@@ -398,11 +398,19 @@ test.describe("paid-order webhook @commerce", () => {
     });
     expect(persistedOrder?.destinationProvince).toBe("SK");
     const initialDeliveries = await getDb().query.orderEmailDeliveries.findMany({
-      columns: { kind: true },
+      columns: { kind: true, status: true, lastErrorCode: true, providerMessageId: true },
       where: eq(orderEmailDeliveries.orderId, persistedOrder?.id ?? ""),
       orderBy: (deliveries) => [asc(deliveries.kind)],
     });
-    expect(initialDeliveries).toEqual([{ kind: "admin_new_order" }, { kind: "confirmation" }]);
+    // Both customer and operator email must stop before Resend, even with local credentials.
+    expect(initialDeliveries).toEqual(
+      ["admin_new_order", "confirmation"].map((kind) => ({
+        kind,
+        status: "retry",
+        lastErrorCode: "configuration_error",
+        providerMessageId: null,
+      })),
+    );
 
     // The order is visible in admin with its persisted snapshots and a confirmation record.
     await page.goto(`/admin/orders?q=${encodeURIComponent(email)}`);
@@ -416,8 +424,7 @@ test.describe("paid-order webhook @commerce", () => {
     const confirmationEmail = page.getByRole("region", { name: "Order confirmation" });
     await expect(page.getByRole("region", { name: "Admin sale notification" })).toBeHidden();
     await expect(confirmationEmail).toBeVisible();
-    // Delivery is durable either way: sent, or parked for the retry cron.
-    await expect(confirmationEmail).toContainText(/Sent|Retry scheduled/);
+    await expect(confirmationEmail).toContainText("Retry scheduled");
     const shippingRationale = page.getByText(
       /Recording the packed weight and actual carrier charge/,
     );

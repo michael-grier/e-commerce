@@ -6,9 +6,10 @@ description: Run the Playwright e2e suite to verify storefront, admin, or commer
 # E2E Check
 
 The suite lives in `e2e/`. In a worktree, choose an unused port and pass that same value through
-`PORT` and `E2E_BASE_URL` on every run. Playwright reuses a server at `E2E_BASE_URL`, so leaving
-the default port in place can target another worktree. Global setup still refuses anything that
-is not test-scoped, then reseeds this worktree's database so runs are repeatable.
+`PORT` and `E2E_BASE_URL` on every run. Playwright starts its own server and refuses an occupied
+port so an existing dev server cannot send test emails with real credentials. The runner clears
+Resend and Sentry credentials for itself and the app. Global setup checks the test environment,
+then reseeds this worktree's database.
 
 ## Choosing a tier
 
