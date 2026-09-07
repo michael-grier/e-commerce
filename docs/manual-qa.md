@@ -104,6 +104,11 @@ transition.
 - [ ] In both cart views, quantity inputs have product-specific accessible names and update totals.
       Plus disables at available stock, excluding reserved units. Typing above that limit immediately
       reduces the input to the maximum and announces the adjustment, without waiting for blur.
+- [ ] While the initial stock lookup is pending, quantity editing is disabled and the item shows
+      Checking stock availability. The message clears when the lookup succeeds.
+- [ ] After stock changes, switch away from and return to the browser tab. The quantity limit
+      refreshes, excess quantities reduce, and Plus reflects the new limit. If stock rises above
+      the cart quantity, the previous adjustment message clears.
 - [ ] Reopening or reloading a saved cart checks current stock and reduces excess quantities.
       Sold-out items show a removal message. Failed stock lookups disable quantity editing and show
       an error; removing an item remains possible in either case.

@@ -31,6 +31,8 @@ export function CartLineItem({ line, compact = false }: CartLineItemProps) {
     if (maxQuantity > 0 && line.quantity > maxQuantity) {
       updateQuantity(line.variantId, maxQuantity);
       setAdjusted(true);
+    } else if (line.quantity < maxQuantity) {
+      setAdjusted(false);
     }
   }, [line.quantity, line.variantId, maxQuantity, updateQuantity]);
 
@@ -99,13 +101,21 @@ export function CartLineItem({ line, compact = false }: CartLineItemProps) {
             </Button>
           ) : null}
         </div>
-        {failed || availableQty === 0 || adjusted ? (
-          <p className="text-destructive text-sm" role="status">
+        {failed || availableQty === null || availableQty === 0 || adjusted ? (
+          <p
+            className={cn(
+              "text-sm",
+              availableQty === null && !failed ? "text-muted-foreground" : "text-destructive",
+            )}
+            role="status"
+          >
             {failed
               ? "Unable to check stock. Try reopening the cart."
-              : availableQty === 0
-                ? "Out of stock. Remove this item to continue."
-                : `Maximum available: ${maxQuantity}. Quantity adjusted.`}
+              : availableQty === null
+                ? "Checking stock availability."
+                : availableQty === 0
+                  ? "Out of stock. Remove this item to continue."
+                  : `Maximum available: ${maxQuantity}. Quantity adjusted.`}
           </p>
         ) : null}
       </div>

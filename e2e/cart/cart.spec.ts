@@ -44,6 +44,29 @@ test.describe("cart @smoke", () => {
     await expect(dialog.getByRole("heading", { name: /Street Deck 8\.25/ })).toHaveCount(1);
   });
 
+  test("pending stock explains why quantity controls are disabled", async ({ page }) => {
+    let releaseStock = () => {};
+    const stockReady = new Promise<void>((resolve) => {
+      releaseStock = resolve;
+    });
+    await page.route("**/api/cart/stock?*", async (route) => {
+      await stockReady;
+      await route.fulfill({ json: { availableQty: 12 } });
+    });
+    try {
+      await addStreetDeckToCart(page);
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("status")).toHaveText("Checking stock availability.");
+      await expect(dialog.getByRole("spinbutton")).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+      releaseStock();
+      await expect(dialog.getByRole("spinbutton")).toBeEnabled();
+      await expect(dialog.getByRole("status")).toBeHidden();
+    } finally {
+      releaseStock();
+    }
+  });
+
   test("both cart views clamp typed quantities and disable plus at current stock", async ({
     page,
   }) => {
@@ -89,6 +112,22 @@ test.describe("cart @smoke", () => {
     const main = page.getByRole("main");
     await expect(main.getByRole("spinbutton")).toHaveValue("2");
     await expect(main.getByRole("status")).toContainText("Maximum available: 2");
+    await page.route("**/api/cart/stock?*", (route) =>
+      route.fulfill({ json: { availableQty: 10 } }),
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(main.getByRole("spinbutton")).toHaveAttribute("max", "10");
+    await expect(main.getByRole("spinbutton")).toHaveValue("2");
+    await expect(main.getByRole("status")).toBeHidden();
+    await expect(main.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    await page.route("**/api/cart/stock?*", (route) =>
+      route.fulfill({ json: { availableQty: 1 } }),
+    );
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(main.getByRole("spinbutton")).toHaveAttribute("max", "1");
+    await expect(main.getByRole("spinbutton")).toHaveValue("1");
+    await expect(main.getByRole("status")).toContainText("Maximum available: 1");
+    await expect(main.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
     await page.route("**/api/cart/stock?*", (route) =>
       route.fulfill({ json: { availableQty: 0 } }),
     );
