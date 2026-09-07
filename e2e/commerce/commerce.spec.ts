@@ -319,6 +319,7 @@ test.describe("paid-order webhook @commerce", () => {
     await expect(orderRow.getByText("Address review", { exact: true })).toBeVisible();
     await orderRow.click();
     await expect(page.getByText("Address review required", { exact: true })).toBeVisible();
+    await expect(page.getByRole("definition").filter({ hasText: "123 Test Street" })).toBeVisible();
     await openFullOrder(page, "Review full order");
     const orderPath = new URL(page.url()).pathname;
 

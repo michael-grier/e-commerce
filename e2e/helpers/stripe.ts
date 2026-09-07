@@ -155,6 +155,8 @@ export function buildSignedCheckoutEvent(
             name: "E2E Customer",
             address: {
               line1: "123 Test Street",
+              // Hosted Checkout sends an empty string when the customer has no unit number.
+              line2: "",
               city: "Calgary",
               state: options.province ?? "AB",
               postal_code: "T1T 1T1",
