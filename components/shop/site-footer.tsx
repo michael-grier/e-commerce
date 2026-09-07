@@ -21,6 +21,7 @@ const policyLinks: ReadonlyArray<{ href: Route; label: string }> = [
   { href: "/terms" as Route, label: "Terms" },
 ];
 
+// Shared storefront footer with social and policy links.
 export function SiteFooter() {
   return (
     <footer className="border-t bg-surface-chrome text-white">
@@ -28,17 +29,18 @@ export function SiteFooter() {
         {/* Logo and social links stay on one row at every width; see the mobile alignment fix. */}
         <div className="flex flex-row items-center justify-between gap-2">
           <BrandLogo />
+          {/* Attribute labels avoid hidden absolute boxes extending the mobile scroll area. */}
           <ul aria-label="Social media" className="flex items-center gap-2">
             {socialLinks.map(({ href, label, Icon }) => (
               <li key={href}>
                 <a
+                  aria-label={label}
                   className="grid size-10 place-items-center rounded-md text-white/80 outline-none transition hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-accent"
                   href={href}
                   rel="noreferrer"
                   target="_blank"
                 >
                   <Icon aria-hidden="true" className="size-5" />
-                  <span className="sr-only">{label}</span>
                 </a>
               </li>
             ))}

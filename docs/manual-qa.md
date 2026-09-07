@@ -59,6 +59,12 @@ transition.
 ## 3. Storefront And Catalog
 
 - [ ] The home page and `/products` render without console or hydration errors.
+- [ ] On the home page and `/products`, scrolling to the bottom stops at the footer at phone,
+      tablet, laptop, and desktop widths. Focusing either social link does not reveal blank space
+      below it, and both links retain their accessible names. Automated in `footer.spec.ts`.
+- [ ] Manual only: confirm the footer scroll boundary in Chrome on an iPhone running iOS 26.6.1,
+      including after the browser toolbar collapses. Desktop WebKit emulation does not reproduce
+      the native iOS browser interface.
 - [ ] Desktop Shop navigation opens on pointer hover and keyboard focus, and every category link
       reaches the matching catalog.
 - [ ] Tablet and phone navigation opens and closes, expands Shop, closes after navigation, and
