@@ -44,6 +44,65 @@ test.describe("cart @smoke", () => {
     await expect(dialog.getByRole("heading", { name: /Street Deck 8\.25/ })).toHaveCount(1);
   });
 
+  test("both cart views clamp typed quantities and disable plus at current stock", async ({
+    page,
+  }) => {
+    await addStreetDeckToCart(page);
+    const dialog = page.getByRole("dialog");
+    const input = dialog.getByRole("spinbutton");
+    await expect(input).toBeEnabled();
+    const max = Number(await input.getAttribute("max"));
+    expect(max).toBe(12);
+    await input.fill(String(max - 1));
+    await dialog.getByRole("button", { name: /Increase quantity/ }).click();
+    await expect(input).toHaveValue(String(max));
+    await expect(dialog.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await input.fill(String(max + 20));
+    await expect(input).toHaveValue(String(max));
+    await expect(dialog.getByRole("status")).toContainText(`Maximum available: ${max}`);
+    await dialog.getByRole("link", { name: "View cart" }).click();
+    await expect(dialog).toBeHidden();
+    const main = page.getByRole("main");
+    const cartInput = main.getByRole("spinbutton");
+    await expect(cartInput).toBeEnabled();
+    await expect(main.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await cartInput.fill(String(max + 20));
+    await expect(cartInput).toHaveValue(String(max));
+    await expect(main.getByRole("status")).toContainText(`Maximum available: ${max}`);
+    await main.getByRole("button", { name: /Decrease quantity/ }).click();
+    await expect(cartInput).toHaveValue(String(max - 1));
+    await expect(main.getByRole("button", { name: /Increase quantity/ })).toBeEnabled();
+    await page.reload();
+    await expect(main.getByRole("spinbutton")).toHaveValue(String(max - 1));
+  });
+
+  test("saved carts refresh stock, clamp excess, and handle sold-out or failed lookups", async ({
+    page,
+  }) => {
+    await addStreetDeckToCart(page);
+    await expect(page.getByRole("dialog").getByRole("spinbutton")).toBeEnabled();
+    await page.getByRole("dialog").getByRole("spinbutton").fill("5");
+    await page.route("**/api/cart/stock?*", (route) =>
+      route.fulfill({ json: { availableQty: 2 } }),
+    );
+    await page.goto("/cart");
+    const main = page.getByRole("main");
+    await expect(main.getByRole("spinbutton")).toHaveValue("2");
+    await expect(main.getByRole("status")).toContainText("Maximum available: 2");
+    await page.route("**/api/cart/stock?*", (route) =>
+      route.fulfill({ json: { availableQty: 0 } }),
+    );
+    await page.reload();
+    await expect(main.getByRole("spinbutton")).toBeDisabled();
+    await expect(main.getByRole("status")).toContainText("Out of stock");
+    await page.route("**/api/cart/stock?*", (route) => route.fulfill({ status: 503, json: {} }));
+    await page.reload();
+    await expect(main.getByRole("status")).toContainText("Unable to check stock");
+    await expect(main.getByRole("button", { name: /Increase quantity/ })).toBeDisabled();
+    await main.getByRole("button", { name: /Remove Street Deck/ }).click();
+    await expect(main.getByText("Your cart is empty")).toBeVisible();
+  });
+
   test("the cart survives a page reload", async ({ page }) => {
     await addStreetDeckToCart(page);
     await page.reload();

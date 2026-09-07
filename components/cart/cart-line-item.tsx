@@ -2,10 +2,12 @@
 
 import { Trash2 } from "lucide-react";
 import Image from "next/image";
-
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { MAX_CART_LINE_QUANTITY } from "@/lib/cart/constants";
 import { useCartStore } from "@/lib/cart/store";
 import type { CartDisplayLine } from "@/lib/cart/types";
+import { useCartStock } from "@/lib/cart/use-cart-stock";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +18,22 @@ type CartLineItemProps = {
   compact?: boolean;
 };
 
+/** Shared cart row, bounded by current sellable stock in both cart views. */
 export function CartLineItem({ line, compact = false }: CartLineItemProps) {
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeLine = useCartStore((state) => state.removeLine);
+  const { availableQty, failed } = useCartStock(line.variantId);
+  const [adjusted, setAdjusted] = useState(false);
+  const maxQuantity = Math.min(availableQty ?? 0, MAX_CART_LINE_QUANTITY);
+
+  useEffect(() => {
+    // Keep sold-out lines removable instead of writing zero into the positive-quantity cart contract.
+    if (maxQuantity > 0 && line.quantity > maxQuantity) {
+      updateQuantity(line.variantId, maxQuantity);
+      setAdjusted(true);
+    }
+  }, [line.quantity, line.variantId, maxQuantity, updateQuantity]);
+
   const quantityLabel = `${line.productName}, ${line.variantName}`;
 
   return (
@@ -64,7 +79,11 @@ export function CartLineItem({ line, compact = false }: CartLineItemProps) {
         <p className="font-bold text-sm">{formatMoney(line.priceCents)} each</p>
         <div className={cn(compact && "flex items-center justify-between gap-3")}>
           <QuantityControl
+            disabled={availableQty === null || maxQuantity === 0 || failed}
+            editable
             label={quantityLabel}
+            max={Math.max(1, maxQuantity)}
+            onLimit={() => setAdjusted(true)}
             onChange={(quantity) => updateQuantity(line.variantId, quantity)}
             value={line.quantity}
           />
@@ -80,6 +99,15 @@ export function CartLineItem({ line, compact = false }: CartLineItemProps) {
             </Button>
           ) : null}
         </div>
+        {failed || availableQty === 0 || adjusted ? (
+          <p className="text-destructive text-sm" role="status">
+            {failed
+              ? "Unable to check stock. Try reopening the cart."
+              : availableQty === 0
+                ? "Out of stock. Remove this item to continue."
+                : `Maximum available: ${maxQuantity}. Quantity adjusted.`}
+          </p>
+        ) : null}
       </div>
       {compact ? null : (
         <div className="flex items-start justify-between gap-4 sm:flex-col sm:items-end">
