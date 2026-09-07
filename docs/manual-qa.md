@@ -134,6 +134,10 @@ transition.
 - [ ] Only configured shipping countries are selectable.
 - [ ] A local-delivery checkout shows free delivery naming the configured area instead of shipping
       rates, and still collects the customer's address.
+- [ ] Leave the optional apartment/unit line blank. The paid order still shows its street address
+      in the admin order peek, full order review, and emails. An empty Stripe `line2` must not
+      turn the address into `Not recorded`. Covered by the commerce delivery-review flow and
+      email formatter tests.
 - [ ] Requesting the delivery method while delivery is not configured is rejected server-side.
 - [ ] Sending a local-delivery request without the address-review acknowledgement is rejected
       before inventory is reserved or Stripe is called.

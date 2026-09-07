@@ -219,12 +219,18 @@ describe("order confirmation template", () => {
     expect(taxed).toContain("$4.45");
   });
 
-  test("formats Stripe shipping details and tolerates unavailable addresses", () => {
+  test.each([
+    undefined,
+    null,
+    "",
+    "   ",
+  ])("formats Stripe shipping details with an unused second line %p", (line2) => {
     expect(
       getShippingAddressLines({
         name: "Test Skater",
         address: {
           line1: "123 Test Street",
+          line2,
           city: "Calgary",
           state: "AB",
           postal_code: "T1T 1T1",
@@ -232,6 +238,9 @@ describe("order confirmation template", () => {
         },
       }),
     ).toEqual(["Test Skater", "123 Test Street", "Calgary, AB T1T 1T1", "CA"]);
+  });
+
+  test("tolerates unavailable addresses", () => {
     expect(getShippingAddressLines(null)).toEqual([]);
     expect(getShippingAddressLines({ address: "invalid" })).toEqual([]);
   });

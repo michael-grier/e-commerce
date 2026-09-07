@@ -1,17 +1,19 @@
 import { z } from "zod";
 
 const shippingDetailsSchema = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().trim().optional(),
   address: z.object({
-    line1: z.string().min(1).nullable().optional(),
-    line2: z.string().min(1).nullable().optional(),
-    city: z.string().min(1).nullable().optional(),
-    state: z.string().min(1).nullable().optional(),
-    postal_code: z.string().min(1).nullable().optional(),
-    country: z.string().min(1).nullable().optional(),
+    // Stripe can send unused fields as empty strings. They must not hide the whole address.
+    line1: z.string().trim().nullable().optional(),
+    line2: z.string().trim().nullable().optional(),
+    city: z.string().trim().nullable().optional(),
+    state: z.string().trim().nullable().optional(),
+    postal_code: z.string().trim().nullable().optional(),
+    country: z.string().trim().nullable().optional(),
   }),
 });
 
+/** Formats recorded shipping details for admin pages and emails, omitting blank fields. */
 export function getShippingAddressLines(input: unknown): string[] {
   const parsed = shippingDetailsSchema.safeParse(input);
 
