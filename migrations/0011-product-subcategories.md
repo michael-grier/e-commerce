@@ -5,7 +5,8 @@ backfills every known product explicitly, makes `category` and `subcategory` non
 the canonical parent-child taxonomy with a check constraint, and replaces the category-only index
 with a composite `(category, subcategory)` index.
 
-The canonical taxonomy lives in `lib/catalog/categories.ts`:
+The taxonomy below is the one introduced by this migration. The current taxonomy lives in
+`lib/catalog/categories.ts`:
 
 - Hardgoods: Decks, Trucks, Wheels, Bearings, Griptape, Hardware
 - Softgoods: T-Shirts, Hoodies, Jackets, Pants, Hats, Socks
