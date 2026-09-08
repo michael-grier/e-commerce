@@ -18,15 +18,15 @@ Migration `0005_daffy_skullbuster.sql` adds durable inventory reservations for S
   Session IDs, and Stripe create idempotency keys.
 - The reconciliation index supports bounded status and due-time scans.
 
-No existing pending Checkout Session can be reconstructed into a safe reservation. Because the
-application is not live, use a coordinated rollout with no legacy in-flight Sessions:
+No existing pending Checkout Session can be reconstructed into a safe reservation. The original rollout
+required a coordinated window with no legacy in-flight Sessions:
 
 1. Prevent new Checkout creation.
 2. Let existing Sessions expire and confirm their paid webhooks have been reconciled.
 3. Apply migration `0005_daffy_skullbuster.sql` on an isolated development branch and verify the
    checks and indexes.
 4. Apply the migration to the deployment database.
-5. Deploy the reservation-aware application and its five-minute reconciliation cron.
+5. Deploy the reservation-aware application and its reconciliation cron. The current schedule lives in `vercel.json`.
 6. Re-enable Checkout and perform Stripe test-mode QA.
 
 Do not deploy the new application before the migration. Do not apply this migration to production

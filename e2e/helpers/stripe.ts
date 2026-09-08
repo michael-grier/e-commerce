@@ -23,7 +23,7 @@ function requireWebhookSecret(): string {
   if (!secret) {
     throw new Error(
       "Commerce e2e specs need STRIPE_WEBHOOK_SECRET (the same value the app verifies with; " +
-        "see docs/manual-qa.md section 2). Set it in .env.local and restart the dev server.",
+        "see TESTING.md#test-environment). Configure it for the test app and rerun the suite.",
     );
   }
   return secret;

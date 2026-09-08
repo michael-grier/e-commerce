@@ -108,9 +108,10 @@ to external services and runs only on explicit request.
 A change that adds or alters a storefront, cart, checkout, webhook, order, inventory, email, or
 admin flow must extend the e2e suite in the same pull request: a spec that would fail if the new
 behavior regressed, following the conventions in `e2e/` (accessible selectors, self-contained
-data, released reservations). Update `docs/manual-qa.md` in the same change — it is the source
-spec each section of the suite maps to — and when a flow genuinely cannot be automated, record
-it there as manual-only and say so in the pull request instead of skipping coverage silently.
+data, released reservations). Use `TESTING.md` to select checks and find the relevant specs.
+Update its coverage map when adding a new testing area; keep detailed automated expectations in
+the specs. When a flow cannot be automated, add its procedure and expected result to the manual
+checks in `TESTING.md` and explain the gap in the pull request.
 
 Add focused regression coverage for behavior changes and failure modes — a test that would have
 caught the bug, not a suite of smoke tests around it. Do not apply migrations or use external

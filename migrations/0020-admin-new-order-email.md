@@ -13,10 +13,10 @@ source control or deployment logs.
 
 The guarded production pipeline applies this enum addition before deploying the application. The
 old application does not create `admin_new_order` rows, so it remains compatible during that short
-migration-to-deploy window. If the recipient setting is missing or invalid afterward, paid-order
-persistence still succeeds. The admin notification remains in the outbox with a normalized
-configuration error for cron or manual retry after the setting is fixed. A malformed address fails
-the application's environment validation before startup.
+migration-to-deploy window. If the recipient setting is missing, paid-order persistence still
+succeeds. The admin notification remains in the outbox with a normalized configuration error for
+retry after the setting is fixed. A malformed address instead fails environment validation before
+startup, so the application cannot process paid orders until that configuration is corrected.
 
 After deployment, create one sandbox paid order and confirm the customer confirmation and admin
 sale notification have separate delivery rows and provider idempotency keys. Replay the paid event

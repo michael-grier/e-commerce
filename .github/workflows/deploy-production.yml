@@ -57,7 +57,7 @@ jobs:
 
       # A failing or aborting migration — including a guarded backfill that refuses to guess and
       # names the offending rows — fails this job, which blocks the deploy job below. Fix forward
-      # per docs/migrations/README.md, then re-run the workflow; the migrator is idempotent.
+      # per migrations/README.md, then re-run the workflow; the migrator is idempotent.
       - name: Apply pending migrations to production
         run: bun run db:migrate
         env:
