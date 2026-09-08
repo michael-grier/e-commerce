@@ -4,6 +4,20 @@ Use this guide to select checks and prepare a release. Detailed automated expect
 [tests/](tests/) and [e2e/](e2e/); the manual checks below cover provider behavior and device states
 those suites cannot fully reproduce. Record results in the pull request or release notes.
 
+## Local development
+
+For a fresh checkout, run `bun install`, copy `.env.example` to `.env.local`, and configure the
+required development values described there. Linked worktrees use the
+[optional worktree setup](#optional-worktree-setup) below instead of copying env files.
+
+Apply committed migrations to an isolated development database with `bun run db:migrate`, then
+start the app with `bun run dev`. Review [migration notes](migrations/README.md) before migrating
+an existing database. `bun run db:seed` is for disposable development data.
+
+For local Stripe events, run `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
+Configure the listener's signing secret as `STRIPE_WEBHOOK_SECRET` through the coordinated
+credential setup. Provider deployment settings belong in [OPERATIONS.md](OPERATIONS.md).
+
 ## Local gate
 
 Run the focused check for the change, then:
@@ -24,9 +38,40 @@ For a build without local credentials, the Quality job supplies a public Clerk p
 Use that same value for a compile/prerender check only; authenticated browser testing requires a
 real Clerk development instance.
 
+## Optional worktree setup
+
+`.env.local` is gitignored, so a new `git worktree` checkout starts without one. Next.js only
+loads env files from its own project root, so the app fails there with
+`@clerk/clerk-react: Missing publishableKey`. In each new worktree, run:
+
+```bash
+bun install
+bun run setup:worktree
+```
+
+`setup:worktree` symlinks the main checkout's `.env.local` into the worktree and makes the shared
+file read-only. When `NEON_API_KEY` and `NEON_PROJECT_ID` are configured, it also creates or reuses
+a Neon branch named after the git branch, generates `.env.development.local` and
+`.env.production.local` database overrides, and applies migrations to that isolated database.
+Without those credentials, it warns and leaves the worktree using the shared database.
+
+Do not replace the symlink or edit the generated overrides by hand. Rerun `bun run setup:worktree`
+to regenerate them. An unexpected `Permission denied` on `.env.local` is the shared-file guard;
+credential changes must be coordinated through the main checkout.
+
+After the pull request is merged, run this before removing the worktree:
+
+```bash
+bun run teardown:worktree --if-merged
+```
+
+It deletes the worktree's Neon branch and generated overrides only when the branch is merged and
+the worktree has no uncommitted or unmerged changes. From the main checkout,
+`bun run worktree:prune` lists leftover worktree databases; adding `--yes` deletes eligible ones.
+
 ## Test environment
 
-Prepare worktrees through [README.md](README.md#git-worktrees). Confirm the database is isolated
+For linked worktrees, use [optional worktree setup](#optional-worktree-setup). Confirm the database is isolated
 before running browser tests: global setup seeds and mutates its catalog. `E2E_DATABASE_URL` must
 match `DATABASE_URL`. Worktree setup supplies that opt-in when it provisions a Neon branch.
 Shared database fallback is not an isolated test target.

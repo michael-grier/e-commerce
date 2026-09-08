@@ -45,7 +45,7 @@ Vercel. The guard compares the non-secret endpoint ID after removing Neon's pool
 The application build uses Vercel's environment configuration.
 
 Worktree databases are provisioned and migrated by `bun run setup:worktree`; see
-[worktree setup](../README.md#git-worktrees). Verify isolation before running migrations locally.
+[worktree setup](../TESTING.md#optional-worktree-setup). Verify isolation before running migrations locally.
 Production migrations go through the workflow, never a developer's shell or automated test.
 
 ## Failed or guarded migrations
