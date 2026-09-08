@@ -32,9 +32,10 @@ export default function HomePage() {
         aria-label="Featured"
         className="relative flex h-[calc(100svh-var(--header-height))] min-h-[620px] items-end lg:-mt-[var(--header-height)] lg:h-svh"
       >
+        {/* Shift the narrow crop toward the takeoff so the pole stays out of the mobile frame. */}
         <Image
           alt="Skater ollieing beside an industrial road"
-          className="object-cover object-[55%_48%]"
+          className="object-cover object-[40%_48%] md:object-[55%_48%]"
           fill
           priority
           sizes="100vw"
