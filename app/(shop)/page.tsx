@@ -32,9 +32,10 @@ export default function HomePage() {
         aria-label="Featured"
         className="relative flex h-[calc(100svh-var(--header-height))] min-h-[620px] items-end lg:-mt-[var(--header-height)] lg:h-svh"
       >
+        {/* Balance the takeoff and the space ahead of the skater in mobile and tablet crops. */}
         <Image
           alt="Skater ollieing beside an industrial road"
-          className="object-cover object-[55%_48%]"
+          className="object-cover object-[47.5%_48%] md:object-[50%_48%] lg:object-[55%_48%]"
           fill
           priority
           sizes="100vw"
