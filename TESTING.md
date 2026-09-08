@@ -146,7 +146,8 @@ for each case. Let application actions and Stripe events manage inventory counte
 | Reject Resend delivery | The order, refund, or fulfillment transition stays committed. Customer delivery stops automatic retries after eight attempts; an authorized retry with the provider restored uses the original key and sends once. |
 | Fail an admin sale alert | Paid-order and customer-confirmation records remain committed; the alert stays available for durable retry without becoming a customer-facing admin retry action. |
 
-After tests, let Sessions convert or expire and verify reservation release before cleaning up data.
+Before cleaning up test data, verify inventory conversion for successful Sessions and reservation
+release for expired or failed Sessions.
 Restore changed catalog and provider settings, stop listeners and test servers, and remove generated
 artifacts. Record PASS or FAIL and any untested checks in the release notes. Money-path or deployment
 exceptions need a second person's review before release.
