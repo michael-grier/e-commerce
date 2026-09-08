@@ -1,306 +1,38 @@
 # Fuckers HQ
 
-Fuckers HQ is a custom storefront for independently sold skate goods. The architecture prioritizes
-hosted payments, guest checkout, server-authoritative pricing, and a small maintainable admin
-surface.
+A custom ecommerce site for Fuckers Skateboards, an independent skate brand in Calgary. It pairs
+a storefront with an admin dashboard for managing products, stock, orders, shipping, and local
+delivery. This repository is public as part of my developer portfolio.
+
+## What it does
+
+Customers can browse and filter the catalog, select product variants, manage a persistent cart,
+and check out through Stripe without creating an account. The site also includes brand content,
+video, and store policies.
+
+The admin dashboard handles product images, pricing, inventory, order fulfillment, shipment
+tracking, and local-delivery address review. Customers receive transactional emails for payments,
+refunds, and fulfillment updates.
+
+## Engineering decisions
+
+- **Protect inventory during checkout.** Prices and stock are resolved on the server, with
+  inventory reservations to handle competing purchases. Payment processing tolerates duplicate
+  events and preserves paid orders when inventory needs operator attention.
+- **Keep order history reliable.** Orders retain the purchased names, prices, and quantities even
+  when the catalog changes. Email delivery retries independently, so a provider failure cannot
+  undo a paid order.
+- **Separate authentication from authorization.** Clerk handles sign-in; server-side checks
+  independently restrict access to store administration.
 
 ## Stack
 
-- Next.js 15 App Router
-- Bun for local scripts
-- Node runtime on Vercel Pro
-- Neon Postgres with Drizzle ORM and drizzle-zod
-- Clerk for admin-only authentication
-- Stripe hosted Checkout and Stripe Tax
-- Cloudflare R2 for direct product image uploads
-- shadcn/ui-style components with Tailwind CSS
-- Zustand and localStorage for cart state
-- Resend, React Email, Sentry, and Biome
-
-## Architecture Summary
-
-- The client cart stores purchase intent and display snapshots only.
-- Checkout re-reads product prices and available inventory from Postgres, then atomically reserves
-  every line before creating a payable Stripe Session.
-- Stripe owns payment, tax, and hosted payment UI.
-- Orders are created after Stripe confirms payment, through a verified webhook or reservation
-  reconciliation that retrieves the Session from Stripe.
-- Paid order creation snapshots items and either allocates all inventory or records an explicit
-  inventory exception in one transaction.
-- `pending_checkouts` bridges Checkout Session creation to the webhook with a short metadata token
-  and an immutable copy of the resolved names, prices, quantities, and currency instead of storing
-  cart JSON directly in Stripe metadata.
-- `inventory_reservations` tracks provisioning, active, asynchronous-payment, conversion, release,
-  and reconciliation state. Physical stock, reserved stock, and available stock remain distinct.
-- Admin access uses Clerk authentication plus an `ADMIN_USER_IDS` allowlist.
-
-The current schema lives in `lib/db/schema.ts`. Checkout and payment processing live in
-`lib/checkout/` and `lib/orders/`.
-
-## Local Setup
-
-For a linked git worktree, follow [Git Worktrees](#git-worktrees) instead of copying environment
-files or migrating the shared database. The steps below are for the main checkout.
-
-1. Install dependencies:
-
-   ```bash
-   bun install
-   ```
-
-2. Copy the example environment file:
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Apply the committed migrations to the local or development database:
-
-   ```bash
-   bun run db:migrate
-   ```
-
-   Review the migration notes below before updating any shared or deployed database.
-
-4. Start the app:
-
-   ```bash
-   bun run dev
-   ```
-
-   Creating a hosted Checkout Session also requires a Stripe test secret plus the free-shipping
-   threshold, allowed countries, and app URL values documented in `.env.example`. Migration 0013
-   seeds the profile-specific shipping rates in Postgres. Keep `STRIPE_TAX_ENABLED=false` until
-   Stripe Tax is configured, then enable it for production.
-
-5. Run checks:
-
-   ```bash
-   bun run lint
-   bun test
-   bun run typecheck
-   bun run build
-   ```
-
-   For browser tiers and manual release checks, follow [TESTING.md](TESTING.md).
-
-For deployment, provider verification, and account handoff, follow [OPERATIONS.md](OPERATIONS.md).
-
-### Stripe Small-Supplier Launch Setup
-
-Before accepting live payments while the business is not registered to collect sales tax, run the
-dashboard wizard:
-
-```bash
-./scripts/configure-stripe-small-supplier.sh
-```
-
-It checks the live account for active or pending Stripe Tax locations and customer-facing account
-tax IDs, then disables Stripe's successful-payment email so the branded Resend confirmation is the
-only successful-payment email. The wizard makes no API calls, captures no values, and never reads
-or writes secrets. It does not determine whether the business must register; take that question to
-the accountant.
-
-### Git Worktrees
-
-`.env.local` is gitignored, so a new `git worktree` checkout starts without one. Next.js only
-loads env files from its own project root, so the app fails there with
-`@clerk/clerk-react: Missing publishableKey`. In each new worktree, run:
-
-```bash
-bun install
-bun run setup:worktree
-```
-
-`setup:worktree` symlinks the main checkout's `.env.local` into the worktree and makes the shared
-file read-only. When `NEON_API_KEY` and `NEON_PROJECT_ID` are configured, it also creates or reuses
-a Neon branch named after the git branch, generates `.env.development.local` and
-`.env.production.local` database overrides, and applies migrations to that isolated database.
-Without those credentials, it warns and leaves the worktree using the shared database.
-
-Do not replace the symlink or edit the generated overrides by hand. Rerun `bun run setup:worktree`
-to regenerate them. An unexpected `Permission denied` on `.env.local` is the shared-file guard;
-credential changes must be coordinated through the main checkout.
-
-After the pull request is merged, run this before removing the worktree:
-
-```bash
-bun run teardown:worktree --if-merged
-```
-
-It deletes the worktree's Neon branch and generated overrides only when the branch is merged and
-the worktree has no uncommitted or unmerged changes. From the main checkout,
-`bun run worktree:prune` lists leftover worktree databases; adding `--yes` deletes eligible ones.
-
-## Database
-
-The Drizzle schema lives in `lib/db/schema.ts`, and generated migrations live in `drizzle/`.
-
-```bash
-bun run db:generate
-bun run db:migrate
-bun run db:seed
-```
-
-`db:migrate` and `db:seed` require `DATABASE_URL`. The seed script is intended for local or
-development databases. The `Ship main` workflow migrates production before deployment and migrates
-the shared dev database in a separate job on pushes to `main`. See the
-[migration runbook](migrations/README.md); never run `db:migrate` against production by hand.
-
-Historical backfill and rollback details live in [migrations/](migrations/README.md).
-
-## Stripe Webhooks
-
-Forward sandbox webhook events to the local raw-body endpoint while developing:
-
-```bash
-stripe listen --forward-to localhost:3000/api/webhooks/stripe
-```
-
-Store the listener's `whsec_...` signing secret as `STRIPE_WEBHOOK_SECRET` in `.env.local`.
-Verified paid Checkout events always create one idempotent paid order. The transaction locks the
-affected reservation and variants, converts every reserved line by decrementing both physical and
-reserved quantities, and marks the pending checkout completed. If reservation state is missing or
-inconsistent, it preserves the paid order as an inventory exception without a partial decrement.
-Inventory exceptions are visible in admin, block fulfillment, and can be retried after an operator
-corrects available stock.
-
-Checkout Session creation is a recoverable saga. The database stores the exact Session request
-before calling Stripe, uses a stable reservation idempotency key, and exposes the hosted URL only
-after local Session linkage succeeds. Confirmed Stripe request rejection releases stock; ambiguous
-network or linkage failures remain `provisioning` for reconciliation.
-
-Stripe expiration and asynchronous-payment-failure events release reservations exactly once.
-Unpaid completion keeps inventory in `awaiting_payment` until Stripe reports success or failure.
-The authenticated `/api/cron/inventory-reservations` job runs every 30 minutes, which lets Neon
-scale to zero between invocations. Under normal load, overdue inventory holds wait at most one
-scheduled interval; each run claims at most 20 due records, so a larger backlog can take additional
-intervals to drain. The job uses leases, recovers stale provisioning through the original idempotent
-request, and retrieves overdue Sessions before converting or releasing stock. It never releases an
-open Session from the local clock alone.
-
-Also forward `charge.refunded` and all `charge.dispute.*` lifecycle events. These events are
-deduplicated by Stripe event ID and reconciled to orders through the persisted Payment Intent ID.
-Refund totals only move forward, while dispute state uses Stripe event time so delayed delivery
-cannot overwrite a newer state. Events that arrive before their paid Checkout event are retained
-and applied when the order is created.
-
-Fully refunded orders and orders with open, lost, or prevented disputes are excluded from
-fulfillment. Partial refunds remain visible to the operator without automatically cancelling the
-remaining fulfillment.
-
-A full refund received while an order is still paid returns every allocated unit to stock in the
-same transaction as the refund state. Refunds received after scheduling, shipment, or delivery stay
-allocated until an administrator confirms the whole order is sellable. Partial refunds use the same
-operator path because Stripe does not identify which physical items, if any, came back.
-
-Order creation writes a confirmation delivery record in the same transaction. Delivery starts only
-after commit, and verified webhook replays retry an unsent record without recreating the order or
-decrementing inventory. Every attempt uses the persisted `order-confirmation/<order-id>` Resend
-idempotency key; a successful record cannot be claimed again.
-
-Configure `RESEND_API_KEY`, `EMAIL_FROM`, `ADMIN_ORDER_EMAIL`, and `SUPPORT_EMAIL` to enable
-delivery. `ADMIN_ORDER_EMAIL` receives one privacy-minimized alert for each newly paid order.
-Resend failures are recorded as normalized error codes without copying email payloads or provider
-error messages into the outbox. Automatic retries use exponential backoff and stop after eight
-attempts. Customer-facing deliveries can be resumed from the protected admin order page. Admin
-sale notifications stay out of that page because opening the order has already served the alert's
-purpose; their delivery records remain available for diagnostics.
-
-The Vercel Pro deployment runs `/api/cron/order-confirmations` every 30 minutes. The paid-order path
-makes the first delivery attempt immediately; this schedule governs durable retries and still lets
-Neon scale to zero between invocations. Generate a dedicated secret locally, then store the output
-as the production `CRON_SECRET` in Vercel:
-
-```bash
-openssl rand -hex 32
-```
-
-Do not commit or reuse this value. Vercel supplies it as a bearer token to the route. The cron
-claims at most 20 due deliveries per invocation, and a ten-minute lease permits recovery if an
-invocation stops mid-attempt. Vercel cron runs only on production deployments, so invoke the route
-with the same bearer header when testing on a disposable local or preview setup.
-
-## Admin Authentication
-
-The `/admin` route requires a Clerk session and a matching Clerk user ID in the
-comma-separated `ADMIN_USER_IDS` allowlist. Configure `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`,
-`CLERK_SECRET_KEY`, and `ADMIN_USER_IDS` in `.env.local`. Middleware requires authentication, and
-the admin server layout independently calls `requireAdmin()` before rendering protected content.
-Admin pages are available for products, orders, deliveries, and shipping rates; their database
-queries and mutations also call `requireAdmin()` before reading or changing store data.
-
-## Cloudflare R2 Product Images
-
-Create an R2 bucket and an Object Read & Write API token scoped to that bucket. Set the five
-`R2_*` values documented in `.env.example`; `R2_PUBLIC_URL` must be the bucket's public development
-URL or custom-domain base URL, not its S3 API endpoint. Restart the app after changing environment
-values.
-
-Each environment with its own database needs its own bucket: local development (the shared dev
-database and its worktree branches) and the production deployment must not share one. The nightly
-orphaned-image reaper deletes any object its own database does not reference, so a shared bucket
-lets production's reaper delete images uploaded through dev (issue #128).
-
-Browser uploads use a short-lived presigned `PUT` URL and go directly to R2. Configure the bucket's
-CORS policy to allow the storefront origin, the `PUT` method, and the `Content-Type` header. For
-local development, a minimal policy is:
-
-```json
-[
-  {
-    "AllowedOrigins": ["http://localhost:3000"],
-    "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
-
-Add the production app origin before deployment. See Cloudflare's documentation for
-[S3 API tokens](https://developers.cloudflare.com/r2/api/tokens/),
-[presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), and
-[bucket CORS policies](https://developers.cloudflare.com/r2/buckets/cors/).
-
-## Sentry Error Monitoring
-
-Create a Sentry Next.js project and set `SENTRY_DSN` plus `NEXT_PUBLIC_SENTRY_DSN` to the same
-project DSN. The public DSN is an ingest address, not an authentication secret. Error monitoring
-runs only when the corresponding DSN is set and Vercel identifies a production deployment.
-The server and edge use `VERCEL_ENV`; the browser uses `NEXT_PUBLIC_VERCEL_ENV`. Local
-production builds and preview deployments do not report to the production project.
-
-Bun tests and Playwright runs clear Resend and Sentry credentials in their processes without
-editing env files. Playwright starts its own server and refuses an occupied port, because an
-existing dev server may still have notification credentials. Choose an unused `PORT` and matching
-`E2E_BASE_URL`. Test order emails remain in the durable retry state without contacting Resend.
-
-The configuration collects errors only: tracing, session replay, Sentry logs, and default
-PII collection are disabled. Server code should use `captureServerException()` with stable area and
-operation labels; do not attach customer details, request bodies, payment data, or secrets.
-
-Readable production stack traces additionally require `SENTRY_ORG`, `SENTRY_PROJECT`, and a secret
-`SENTRY_AUTH_TOKEN` in the deployment environment. Source-map generation and upload remain disabled
-when the auth token is absent. Never expose `SENTRY_AUTH_TOKEN` through a `NEXT_PUBLIC_*` variable.
-
-## Security Hardening
-
-The app sends a baseline set of browser security headers from `next.config.ts` and uses Clerk's
-middleware integration to generate a Clerk-compatible Content Security Policy. The policy blocks
-framing and object embeds while allowing the external connections required by Clerk, Sentry, and
-direct R2 uploads. Checkout and upload-URL requests must use JSON and have bounded request bodies;
-checkout submissions also cap line count and quantity before querying Postgres or calling Stripe.
-
-Production rate limiting belongs at the Vercel Firewall so abusive requests are stopped before a
-serverless function, Neon, R2, or Stripe incurs work. Follow the
-[Vercel WAF rate-limiting guide](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting)
-and, before go-live, publish fixed-window rules keyed by source IP for:
-
-- `POST /api/checkout`: 10 requests per 60 seconds.
-- `POST /api/admin/upload-url`: 30 requests per 60 seconds.
-
-Start each rule in log-only mode during final QA, confirm normal checkout and batch image uploads
-do not approach the threshold, and then switch the action to rate limit with a `429` response. Do
-not apply these rules to the Stripe webhook route; signature verification is its trust boundary,
-and Stripe must be able to retry delivery.
+Next.js 15, React 19, TypeScript, and Tailwind CSS; Neon Postgres with Drizzle ORM; Clerk, Stripe
+Checkout, Cloudflare R2, Resend, and Sentry. Bun runs the local tooling, with Biome, Bun tests,
+and Playwright supporting automated checks. The app is hosted on Vercel.
+
+## Explore the code
+
+- [Storefront](app/%28shop%29/) and [admin dashboard](app/admin/)
+- [Checkout](lib/checkout/), [order processing](lib/orders/), and [database schema](lib/db/schema.ts)
+- [Browser tests](e2e/) and [component and service tests](tests/)

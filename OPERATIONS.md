@@ -2,7 +2,7 @@
 
 Use this runbook for deployment, provider verification, and account handoff. Configuration keys and
 validation live in [.env.example](.env.example) and [lib/env.ts](lib/env.ts); local setup lives in
-[README.md](README.md). Verify dashboard state when doing operational work instead of treating this
+[TESTING.md](TESTING.md#local-development). Verify dashboard state when doing operational work instead of treating this
 file as a record of which setup tasks are complete.
 
 ## Deployment and recovery
@@ -96,8 +96,18 @@ without customer data; inspect readable stack traces and confirm payloads, addre
 information, and secrets are absent. Preview/local builds and automated tests deliberately suppress
 production reporting.
 
-Follow [README.md](README.md#security-hardening) for checkout and upload WAF rules. Verify normal
-requests in log-only mode before enforcing rate limits. Keep Stripe webhooks reachable for retries.
+Production rate limiting belongs at the Vercel Firewall so abusive requests are stopped before a
+serverless function, Neon, R2, or Stripe incurs work. Follow the
+[Vercel WAF rate-limiting guide](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting)
+and, before go-live, publish fixed-window rules keyed by source IP for:
+
+- `POST /api/checkout`: 10 requests per 60 seconds.
+- `POST /api/admin/upload-url`: 30 requests per 60 seconds.
+
+Start each rule in log-only mode during final QA, confirm normal checkout and batch image uploads
+do not approach the threshold, and then switch the action to rate limit with a `429` response. Do
+not apply these rules to the Stripe webhook route; signature verification is its trust boundary,
+and Stripe must be able to retry delivery.
 Use [TESTING.md](TESTING.md) for release checks and record actual results outside this runbook.
 
 ## Account ownership and handoff
